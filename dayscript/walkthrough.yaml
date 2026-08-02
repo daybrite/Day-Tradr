@@ -1,0 +1,74 @@
+# Day Tradr walkthrough (https://daybrite.dev/docs/dayscript).
+#
+# Run against the deterministic mock so every price below is exact on every target:
+#
+#     day launch -p macos-appkit --env TRADR_MOCK=1 --script dayscript/walkthrough.yaml
+#
+# The mock is integer-LCG arithmetic (src/quotes.rs) — no transcendentals — so these literals
+# hold on wasm and every native architecture alike.
+name: day-tradr-walkthrough
+description: Watchlist, detail chart, symbol management, and settings on mock data.
+flow:
+  - wait_for: { id: nav }
+  - wait_for: { id: watchlist-title }
+  - assert_text: { id: data-source, key: data_mock }
+  - assert_text: { id: wl-price-AAPL.US, text: "226.43" }
+  - assert_text: { id: wl-chg-AAPL.US, text: "−0.94 (0.41%)" }
+  - assert_text: { id: wl-price-XAUUSD, text: "3380.88" }
+  - screenshot: watchlist
+
+  # A watchlist card is tappable through to the detail page.
+  - tap: { id: wl-row-MSFT.US }
+  - assert_route: { route: MSFT.US }
+  - wait_for: { id: detail-price }
+  - assert_text: { id: detail-price, text: "481.83" }
+  - assert_text: { id: detail-name, text: "Microsoft Corp." }
+
+  # Direct navigation by symbol key; the shared range picker re-slices the canvas chart.
+  - navigate: { route: AAPL.US }
+  - wait_for: { id: detail-price }
+  - assert_text: { id: detail-price, text: "226.43" }
+  - assert_text: { id: detail-chg, text: "−0.94 (0.41%)" }
+  - select: { id: range-picker, index: 0 }
+  - screenshot: detail-1m
+  - select: { id: range-picker, index: 3 }
+  - screenshot: detail
+
+  # Manage: add a typed symbol (normalized to upper-case), visit it, remove it again so
+  # reruns start from the same list.
+  - navigate: { route: manage }
+  - wait_for: { id: sym-field }
+  - input: { id: sym-field, text: "gc.f" }
+  - tap: { id: sym-add }
+  - assert_text: { id: sym-status, key: manage_status_added }
+  - tap: { id: sym-add }
+  - assert_text: { id: sym-status, key: manage_status_empty }
+  - screenshot: manage
+  - navigate: { route: GC.F }
+  - wait_for: { id: detail-price }
+  - assert_text: { id: detail-symbol, text: "GC.F" }
+  - navigate: { route: manage }
+  - wait_for: { id: sym-field }
+  # The watchlist rows live in a recycling list (docs/list.md): rows realize lazily, and the
+  # just-added row sits beyond the list's viewport — surface it through the reorder seam
+  # (which addresses rows by index, realized or not), then remove it. Removing it from the
+  # front restores the original order, and the final swap-and-back exercises reorder alone.
+  - scroll_to: { id: sym-rows }
+  # The 6 default symbols occupy rows 0–5, so the just-added GC.F sits at row 6.
+  - reorder: { id: sym-rows, from: 6, to: 0 }
+  - tap: { id: sym-remove-GC.F }
+  - assert_text: { id: sym-status, key: manage_status_removed }
+  - reorder: { id: sym-rows, from: 1, to: 0 }
+  - reorder: { id: sym-rows, from: 0, to: 1 }
+  # Adding a preset that is already tracked reports rather than duplicating.
+  - tap: { id: preset-add }
+  - assert_text: { id: sym-status, key: manage_status_exists }
+
+  # Settings: About, language picker; the theme picker is NOT asserted — backends without
+  # Cap::Appearance hide that section.
+  - navigate: { route: settings }
+  - wait_for: { id: language-picker }
+  - assert_text: { id: about-version, text: "0.1.0" }
+  - assert_visible: { id: about-stooq }
+  - assert_visible: { id: refresh-all }
+  - screenshot: settings

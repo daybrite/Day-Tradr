@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App theme: Material 3 Expressive (new motion/shape/typography system, material 1.13+),
+         follows the system light/dark setting (DayNight), no framework ActionBar (Day renders its
+         own nav/toolbar chrome). Requires com.google.android.material. -->
+    <style name="AppTheme" parent="Theme.Material3Expressive.DayNight.NoActionBar">
+        <!-- Charcoal chrome + chart-green accent (colors.xml): the status bar and Day's
+             MaterialToolbar pick up colorPrimary; controls pick up the accent. -->
+        <item name="colorPrimary">@color/tradr_primary</item>
+        <item name="colorOnPrimary">@color/tradr_on_primary</item>
+        <item name="colorSecondary">@color/tradr_accent</item>
+        <item name="android:statusBarColor">@color/tradr_primary</item>
+    </style>
+</resources>
