@@ -5,6 +5,8 @@ on:
     branches: ["**"]
     tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
   workflow_dispatch:
+  schedule:
+    - cron: "0 10 * * *" # daily (UTC)
 
 permissions:
   contents: write # release-asset upload on tag builds
@@ -20,8 +22,10 @@ jobs:
       # main until the next day release: the flatpak/MSIX default-icon fallback (needed by apps
       # without resource/icons/, like this one) is newer than the latest published CLI.
       day-version: main
-      scripts: scripts/weather.yaml
-      launch-env: WEATHER_MOCK=1
+      # Named rather than "auto": the other dayscript, prefs-window.yaml, drives the desktop
+      # Preferences window, which the mobile targets in this matrix have no equivalent of.
+      scripts: dayscript/walkthrough.yaml
+      launch-env: TRADR_MOCK=1
       locales: en fr ar zh-CN
       # Publish the web build to GitHub Pages on every push to main (empty tag-pattern → the
       # default-branch mode). Native release assets still attach on vX.Y.Z tags, independently.
