@@ -41,8 +41,11 @@ pub fn settings_page() -> AnyPiece {
         // day-piece-settings). Same ids, same keys, same live apply; the appearance row is
         // Cap::Appearance-gated inside the piece.
         AnyPiece::new(
-            section((day_piece_settings::language_picker(PREF_LOCALE, res::locales::ALL),))
-                .title(res::str::settings_language_section()),
+            section((day_piece_settings::language_picker(
+                PREF_LOCALE,
+                res::locales::ALL,
+            ),))
+            .title(res::str::settings_language_section()),
         ),
     ];
     if capability(Cap::Appearance) != Support::Unsupported {

@@ -25,8 +25,8 @@ fn symbol_page(id: &str) -> AnyPiece {
             return page;
         }
         let id = id.to_string();
-        page.context_menu(vec![menu_item(res::str::open_in_new_window().format()).action(
-            move || {
+        page.context_menu(vec![
+            menu_item(res::str::open_in_new_window().format()).action(move || {
                 let id = id.clone();
                 day::open_window(
                     None,
@@ -39,8 +39,8 @@ fn symbol_page(id: &str) -> AnyPiece {
                     day::WindowKind::Normal,
                     move || symbol_page(&id),
                 );
-            },
-        )])
+            }),
+        ])
     } else {
         // A just-removed key mid-navigation: an empty pane, the selection resets right after.
         spacer().any()
