@@ -1,0 +1,19 @@
+Day Tradr is a watchlist for the symbols you actually follow, with the numbers laid out so you can read them at a glance.
+
+Every symbol gets a card: its name, a sparkline of recent movement, the price, and a change chip you can read from across the room. Tap one for the full picture — a price chart with a volume strip, and the statistics that matter: open, high, low, volume, 52-week high and low, previous close, a 20-day moving average, and the number of sessions behind it.
+
+WHAT YOU GET
+
+• Stocks, commodities and currency pairs, added by ticker or picked from suggestions
+• Sparklines on the list, full charts on the detail screen
+• A statistics grid that does not make you scroll to find the number you wanted
+• English, French, Arabic and Simplified Chinese, with right-to-left layout in Arabic
+• Light and dark, following your system or set by hand
+
+END-OF-DAY QUOTES
+
+Data comes from stooq.com's free end-of-day quotes. This is not a real-time feed and Day Tradr is not a trading app: there is no account, no brokerage connection, and nothing to buy or sell here.
+
+Open source, built with the Day framework — one Rust codebase drawing itself with each platform's real native widgets. github.com/daybrite/Day-Tradr
+
+Data by stooq.com.

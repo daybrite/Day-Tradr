@@ -1,0 +1,1 @@
+actions,liste de suivi,marchés,cours,symbole,graphique,finance,matières premières,forex

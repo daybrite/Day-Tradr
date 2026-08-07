@@ -1,0 +1,1 @@
+First public release. Watchlist cards with sparklines, a detail screen with price and volume charts, a full statistics grid, symbol management, and four languages.

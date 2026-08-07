@@ -1,0 +1,19 @@
+Day Tradr est une liste de suivi pour les symboles que vous suivez vraiment, avec des chiffres disposés pour être lus d'un coup d'œil.
+
+Chaque symbole a sa carte : son nom, une sparkline de ses mouvements récents, le prix et une pastille de variation lisible à l'autre bout de la pièce. Touchez-en une pour tout voir — un graphique de prix avec une bande de volume, et les statistiques qui comptent : ouverture, haut, bas, volume, haut et bas sur 52 semaines, clôture précédente, moyenne mobile sur 20 jours, et le nombre de séances derrière ces chiffres.
+
+CE QUE VOUS OBTENEZ
+
+• Actions, matières premières et paires de devises, ajoutées par symbole ou choisies parmi les suggestions
+• Des sparklines dans la liste, des graphiques complets sur l'écran de détail
+• Une grille de statistiques qui ne vous oblige pas à faire défiler pour trouver le chiffre voulu
+• Anglais, français, arabe et chinois simplifié, avec mise en page de droite à gauche en arabe
+• Clair et sombre, selon votre système ou réglé à la main
+
+COURS DE CLÔTURE
+
+Les données viennent des cours de clôture gratuits de stooq.com. Ce n'est pas un flux en temps réel et Day Tradr n'est pas une application de trading : il n'y a pas de compte, pas de connexion à un courtier, et rien à acheter ni à vendre ici.
+
+Open source, construit avec le framework Day — une seule base de code Rust qui se dessine avec les vrais widgets natifs de chaque plateforme. github.com/daybrite/Day-Tradr
+
+Données par stooq.com.

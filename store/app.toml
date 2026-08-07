@@ -1,0 +1,12 @@
+# Store listing metadata that is NOT localized. The localized text lives in store/<locale>/.
+bundle-id = "dev.daybrite.daytradr"
+apple-category = "FINANCE"
+copyright = "2026 Daybrite"
+contact-email = "hello@daybrite.dev"
+review-notes = """
+Day Tradr shows end-of-day quotes from stooq.com, a free service that needs no API key or account,
+so the app works immediately with no configuration.
+
+Quotes are end-of-day, not real-time, and the app says so on screen. There is no trading, no
+brokerage connection, and no way to move money — it is a watchlist.
+"""
