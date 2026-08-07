@@ -117,6 +117,7 @@ fn sidebar_header() -> AnyPiece {
 
 // Mobile / embedded entry points — each macro expands to nothing off its own platform.
 day::ios_main!("Day Tradr", root);
+day::macos_main!("Day Tradr", root);
 day::android_main!(root);
 day::arkui_main!(root);
 day::web_main!("Day Tradr", root);
