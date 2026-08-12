@@ -15,7 +15,34 @@ flow:
   - assert_text: { id: wl-price-AAPL, text: "230.04" }
   - assert_text: { id: wl-chg-AAPL, text: "−0.45 (0.20%)" }
   - assert_text: { id: "wl-price-GC=F", text: "3203.55" }
+  # Breadth strip: the whole list summarized. Mock data is deterministic, so the counts and
+  # the biggest movers are exact.
+  - assert_text: { id: breadth-up, text: "2" }
+  - assert_text: { id: breadth-down, text: "4" }
+  - assert_text: { id: breadth-best, text: "SPY" }
+  - assert_text: { id: breadth-worst, text: "GC=F" }
   - screenshot: watchlist
+
+  # The chip-mode control re-reads EVERY chip at once: both → percent → absolute → both.
+  # Cycled a full lap so the persisted setting ends where it started and a rerun sees the
+  # same watchlist screenshot as this run did.
+  - tap: { id: chip-mode }
+  - assert_text: { id: wl-chg-AAPL, text: "−0.20%" }
+  - assert_text: { id: wl-chg-SPY, text: "+0.41%" }
+  - tap: { id: chip-mode }
+  - assert_text: { id: wl-chg-AAPL, text: "−0.45" }
+  - screenshot: watchlist-chip-absolute
+  - tap: { id: chip-mode }
+  - assert_text: { id: wl-chg-AAPL, text: "−0.45 (0.20%)" }
+
+  # Sorting is a VIEW over the manual order (the saved list is untouched), so switching back
+  # to Custom restores it. The resulting ORDER is verified by the screenshot — dayscript
+  # addresses watchlist rows by id, not by position.
+  - select: { id: sort-picker, index: 2 }
+  - assert_value: { id: sort-picker, value: 2 }
+  - screenshot: watchlist-sorted
+  - select: { id: sort-picker, index: 0 }
+  - assert_value: { id: sort-picker, value: 0 }
 
   # A watchlist card is tappable through to the detail page.
   - tap: { id: wl-row-MSFT }
@@ -32,7 +59,17 @@ flow:
   - select: { id: range-picker, index: 0 }
   - screenshot: detail-1m
   - select: { id: range-picker, index: 3 }
+  # Moving-average overlays + the range bars: the analysis surface on the detail page.
+  - assert_visible: { id: overlay-legend }
+  - assert_visible: { id: range-day }
+  - assert_visible: { id: range-52w }
   - screenshot: detail
+  # The overlay switch hides both lines and its own legend; it is persisted app-wide.
+  - toggle: { id: overlay-toggle, value: false }
+  - assert_value: { id: overlay-toggle, value: false }
+  - screenshot: detail-no-overlay
+  - toggle: { id: overlay-toggle, value: true }
+  - assert_visible: { id: overlay-legend }
 
   # Manage: add a typed symbol (normalized to upper-case), visit it, remove it again so
   # reruns start from the same list.

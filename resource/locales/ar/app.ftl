@@ -17,13 +17,10 @@ detail_loading = جارٍ تحميل الأسعار…
 detail_error = تعذر التحميل: { $error }
 
 stat_open = الافتتاح
-stat_high = الأعلى
-stat_low = الأدنى
 stat_volume = الحجم
-stat_52w_high = أعلى 52 أسبوعًا
-stat_52w_low = أدنى 52 أسبوعًا
 stat_prev_close = الإغلاق السابق
 stat_sma20 = متوسط 20
+stat_sma50 = متوسط ٥٠
 stat_days = الجلسات
 
 manage_list_section = الرموز المتابَعة
@@ -57,3 +54,24 @@ settings_refresh_hint = إعادة جلب كل الرموز المتابَعة �
 settings_refresh = تحديث الكل
 
 open_in_new_window = فتح في نافذة جديدة
+
+# ملخص قائمة المتابعة وترتيبها
+breadth_up = صاعدة
+breadth_down = هابطة
+breadth_best = الأفضل { $pct }
+breadth_worst = الأسوأ { $pct }
+sort_manual = مخصص
+sort_name = الاسم
+sort_change = التغير
+watchlist_empty = لا رموز متابَعة
+watchlist_empty_hint = أضف رمزًا من صفحة الرموز.
+
+# طبقات الرسم البياني وأشرطة النطاق
+overlay_label = المتوسطات
+overlay_sma20 = ٢٠ يومًا
+overlay_sma50 = ٥٠ يومًا
+range_day = نطاق اليوم
+range_52w = نطاق ٥٢ أسبوعًا
+chip_both = التغير + ٪
+chip_percent = نسبة مئوية
+chip_absolute = التغير

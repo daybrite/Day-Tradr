@@ -39,28 +39,72 @@ fn stat(
     .any()
 }
 
+/// A titled range bar: caption over the low→high track with the price marked on it.
+/// `Copy` on the accessors so the same one can feed the track and its endpoint label; the call
+/// sites pass non-capturing closures, which are Copy.
+fn range_row(
+    title: LocalizedText,
+    quote: Signal<Load<quotes::Quote>>,
+    lo: impl Fn(&quotes::Quote) -> f64 + Copy + 'static,
+    hi: impl Fn(&quotes::Quote) -> f64 + Copy + 'static,
+    id: &str,
+) -> AnyPiece {
+    let lo_label = label(move || {
+        quote.with(|l| {
+            l.ready()
+                .map(|q| format!("{:.2}", lo(q)))
+                .unwrap_or_default()
+        })
+    })
+    .font(Font::Caption2);
+    let hi_label = label(move || {
+        quote.with(|l| {
+            l.ready()
+                .map(|q| format!("{:.2}", hi(q)))
+                .unwrap_or_default()
+        })
+    })
+    .font(Font::Caption2);
+    column((
+        label(title).font(Font::Caption),
+        charts::range_bar(quote, lo, hi).id(id.to_string()),
+        row((lo_label, spacer(), hi_label)).grow_w(),
+    ))
+    .spacing(2.0)
+    .align(HAlign::Leading)
+    .grow_w()
+    .any()
+}
+
+/// One overlay legend entry: a short colored rule beside its label.
+fn legend(color: Color, text: LocalizedText) -> AnyPiece {
+    row((
+        rounded_rectangle(1.5).fill(color).frame(14.0, 3.0),
+        label(text).font(Font::Caption2),
+    ))
+    .spacing(5.0)
+    .align(VAlign::Center)
+    .any()
+}
+
 fn stats_grid(quote: Signal<Load<quotes::Quote>>) -> AnyPiece {
+    // The day's and the year's high/low are NOT cells here — the range bars above show them
+    // with the price positioned between them, which is strictly more information in less
+    // space. What remains is what a bar cannot say.
     grid((
         grid_row((
             stat(res::str::stat_open(), quote, |q| format!("{:.2}", q.open)),
-            stat(res::str::stat_high(), quote, |q| format!("{:.2}", q.high)),
-            stat(res::str::stat_low(), quote, |q| format!("{:.2}", q.low)),
-        )),
-        grid_row((
-            stat(res::str::stat_volume(), quote, |q| fmt_volume(q.volume)),
-            stat(res::str::stat_52w_high(), quote, |q| {
-                format!("{:.2}", q.week52_high())
-            }),
-            stat(res::str::stat_52w_low(), quote, |q| {
-                format!("{:.2}", q.week52_low())
-            }),
-        )),
-        grid_row((
             stat(res::str::stat_prev_close(), quote, |q| {
                 format!("{:.2}", q.prev_close)
             }),
+            stat(res::str::stat_volume(), quote, |q| fmt_volume(q.volume)),
+        )),
+        grid_row((
             stat(res::str::stat_sma20(), quote, |q| {
                 format!("{:.2}", q.sma20())
+            }),
+            stat(res::str::stat_sma50(), quote, |q| {
+                format!("{:.2}", q.sma50())
             }),
             stat(res::str::stat_days(), quote, |q| {
                 format!("{}", q.closes.len())
@@ -101,7 +145,9 @@ pub fn detail_page(symbol: &str) -> AnyPiece {
                         .unwrap_or_else(|| "…".to_string())
                 })
             })
-            .font(Font::System(40.0))
+            // A semantic step, not a point size: the hero number has to grow with the reader's
+            // accessibility text setting like every other label on the page.
+            .font(Font::LargeTitle)
             .bold()
             .id("detail-price"),
             change_chip(quote, "detail-chg".to_string()),
@@ -112,7 +158,11 @@ pub fn detail_page(symbol: &str) -> AnyPiece {
     .spacing(12.0);
 
     let ranges: Vec<String> = charts::RANGES.iter().map(|(n, _)| n.to_string()).collect();
-    let range_row = picker(ranges, range).segmented().id("range-picker");
+    let range_picker = picker(ranges, range).segmented().id("range-picker");
+    // The overlay preference is app-wide and persisted, so a two-way binding writes through
+    // to prefs rather than living only for this page's lifetime.
+    let overlay_on = quotes::overlay();
+    Effect::new(move || quotes::persist_overlay(overlay_on.get()));
 
     scroll(
         column((
@@ -143,9 +193,50 @@ pub fn detail_page(symbol: &str) -> AnyPiece {
                     .id("detail-error")
                 },
             ),
-            range_row,
+            range_picker,
             charts::price_chart(quote),
+            // The overlay switch sits under the chart it controls, with the legend naming the
+            // two lines by their colors — the chart is otherwise three lines with no key.
+            row((
+                label(res::str::overlay_label()).font(Font::Callout),
+                toggle(overlay_on).id("overlay-toggle"),
+                spacer(),
+                when(
+                    move || overlay_on.get(),
+                    || {
+                        row((
+                            legend(charts::SMA20_COLOR, res::str::overlay_sma20()),
+                            legend(charts::SMA50_COLOR, res::str::overlay_sma50()),
+                        ))
+                        .spacing(12.0)
+                        .id("overlay-legend")
+                    },
+                ),
+            ))
+            .spacing(10.0)
+            .align(VAlign::Center)
+            .grow_w(),
             charts::volume_strip(quote),
+            // Where the price sits inside today's band and inside the year's — the reading the
+            // stats cells below give as bare numbers.
+            row((
+                range_row(
+                    res::str::range_day(),
+                    quote,
+                    |q| q.low,
+                    |q| q.high,
+                    "range-day",
+                ),
+                range_row(
+                    res::str::range_52w(),
+                    quote,
+                    |q| q.week52_low(),
+                    |q| q.week52_high(),
+                    "range-52w",
+                ),
+            ))
+            .spacing(18.0)
+            .grow_w(),
             stats_grid(quote),
             label(res::str::data_attribution()).font(Font::Caption2),
         ))

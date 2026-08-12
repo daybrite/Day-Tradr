@@ -19,13 +19,10 @@ detail_loading = Loading quotes…
 detail_error = Could not load: { $error }
 
 stat_open = Open
-stat_high = High
-stat_low = Low
 stat_volume = Volume
-stat_52w_high = 52W High
-stat_52w_low = 52W Low
 stat_prev_close = Prev Close
 stat_sma20 = SMA 20
+stat_sma50 = SMA 50
 stat_days = Sessions
 
 manage_list_section = Tracked symbols
@@ -59,3 +56,24 @@ settings_refresh_hint = Refetch every tracked symbol from the source.
 settings_refresh = Refresh all
 
 open_in_new_window = Open in New Window
+
+# Watchlist summary + ordering (added with the breadth strip and sort picker)
+breadth_up = Advancing
+breadth_down = Declining
+breadth_best = Best { $pct }
+breadth_worst = Worst { $pct }
+sort_manual = Custom
+sort_name = Name
+sort_change = Change
+watchlist_empty = No symbols tracked
+watchlist_empty_hint = Add one from the Symbols page.
+
+# Detail chart overlays + range bars
+overlay_label = Averages
+overlay_sma20 = 20-day
+overlay_sma50 = 50-day
+range_day = Day range
+range_52w = 52-week range
+chip_both = Change + %
+chip_percent = Percent
+chip_absolute = Change

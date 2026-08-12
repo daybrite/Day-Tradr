@@ -17,13 +17,10 @@ detail_loading = 正在加载行情…
 detail_error = 加载失败：{ $error }
 
 stat_open = 开盘
-stat_high = 最高
-stat_low = 最低
 stat_volume = 成交量
-stat_52w_high = 52周最高
-stat_52w_low = 52周最低
 stat_prev_close = 昨收
 stat_sma20 = 20日均线
+stat_sma50 = 50 日均线
 stat_days = 交易日
 
 manage_list_section = 已跟踪代码
@@ -57,3 +54,24 @@ settings_refresh_hint = 从数据源重新获取所有跟踪的代码。
 settings_refresh = 全部刷新
 
 open_in_new_window = 在新窗口中打开
+
+# 自选列表概览与排序
+breadth_up = 上涨
+breadth_down = 下跌
+breadth_best = 最佳 { $pct }
+breadth_worst = 最差 { $pct }
+sort_manual = 自定义
+sort_name = 名称
+sort_change = 涨跌
+watchlist_empty = 未跟踪任何代码
+watchlist_empty_hint = 请在“代码”页面添加。
+
+# 图表叠加线与区间条
+overlay_label = 均线
+overlay_sma20 = 20 日
+overlay_sma50 = 50 日
+range_day = 当日区间
+range_52w = 52 周区间
+chip_both = 涨跌额 + %
+chip_percent = 百分比
+chip_absolute = 涨跌额

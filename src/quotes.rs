@@ -27,6 +27,10 @@ use std::cell::{OnceCell, RefCell};
 
 /// The prefs key holding the watchlist as a comma-joined symbol list.
 const PREF_SYMBOLS: &str = "tradr.symbols";
+/// View preferences, persisted beside the watchlist so the app opens the way it was left.
+const PREF_SORT: &str = "tradr.sort";
+const PREF_CHIP: &str = "tradr.chip";
+const PREF_OVERLAY: &str = "tradr.overlay";
 
 /// A fresh install tracks a spread of stocks, an ETF, and two commodities. (TSLA stays in
 /// [`PRESETS`], so it can still be added from the manage page.)
@@ -145,6 +149,47 @@ impl Quote {
             t.iter().sum::<f64>() / t.len() as f64
         }
     }
+
+    /// The 50-day average, beside [`Self::sma20`] in the chart's overlay legend.
+    pub fn sma50(&self) -> f64 {
+        let t = tail(&self.closes, 50);
+        if t.is_empty() {
+            self.last
+        } else {
+            t.iter().sum::<f64>() / t.len() as f64
+        }
+    }
+
+    /// Where `last` sits between `lo` and `hi`, as 0…1. Both range bars read this; a degenerate
+    /// range (a flat series, or a symbol with one session) centres the marker rather than
+    /// dividing by zero.
+    pub fn position_in(&self, lo: f64, hi: f64) -> f64 {
+        if hi - lo <= f64::EPSILON {
+            0.5
+        } else {
+            ((self.last - lo) / (hi - lo)).clamp(0.0, 1.0)
+        }
+    }
+}
+
+/// A rolling `n`-day simple moving average over `closes`, index-aligned with it: `None` until
+/// there are `n` samples to average, so the chart starts each overlay where it becomes real
+/// rather than drawing a misleading ramp from the first bar.
+pub fn sma_series(closes: &[f64], n: usize) -> Vec<Option<f64>> {
+    let mut out = Vec::with_capacity(closes.len());
+    let mut sum = 0.0;
+    for (i, c) in closes.iter().enumerate() {
+        sum += c;
+        if i >= n {
+            sum -= closes[i - n];
+        }
+        out.push(if i + 1 >= n {
+            Some(sum / n as f64)
+        } else {
+            None
+        });
+    }
+    out
 }
 
 pub fn tail(v: &[f64], n: usize) -> &[f64] {
@@ -197,6 +242,195 @@ pub fn symbols() -> Signal<Vec<String>> {
 
 pub fn range() -> Signal<usize> {
     RANGE.with(|cell| *cell.get_or_init(|| Scope::detached().enter(|| Signal::new(3)))) // 1Y
+}
+
+/// How the watchlist is ordered. `Manual` is the drag-reordered list the user owns; the other
+/// two are views over it, so switching back to `Manual` restores their arrangement untouched.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Sort {
+    Manual,
+    Name,
+    /// Biggest gainer first — the "what moved today" ordering.
+    Change,
+}
+
+impl Sort {
+    pub const ALL: [Sort; 3] = [Sort::Manual, Sort::Name, Sort::Change];
+    fn key(self) -> &'static str {
+        match self {
+            Sort::Manual => "manual",
+            Sort::Name => "name",
+            Sort::Change => "change",
+        }
+    }
+    fn from_key(s: &str) -> Sort {
+        Self::ALL
+            .into_iter()
+            .find(|v| v.key() == s)
+            .unwrap_or(Sort::Manual)
+    }
+}
+
+/// What the change chip shows. Tapping any chip cycles every chip at once (the Apple Stocks
+/// behaviour: the column is one control, not a per-row setting).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ChipMode {
+    /// `+1.24 (0.62%)` — absolute move and percentage together.
+    Both,
+    /// `+0.62%` — percentage alone, the densest reading for scanning a long list.
+    Percent,
+    /// `+1.24` — the move in the instrument's own units.
+    Absolute,
+}
+
+impl ChipMode {
+    fn key(self) -> &'static str {
+        match self {
+            ChipMode::Both => "both",
+            ChipMode::Percent => "percent",
+            ChipMode::Absolute => "absolute",
+        }
+    }
+    /// The order tapping walks: the fullest reading first, then the two narrow ones.
+    pub fn next(self) -> ChipMode {
+        match self {
+            ChipMode::Both => ChipMode::Percent,
+            ChipMode::Percent => ChipMode::Absolute,
+            ChipMode::Absolute => ChipMode::Both,
+        }
+    }
+    fn from_key(s: &str) -> ChipMode {
+        match s {
+            "percent" => ChipMode::Percent,
+            "absolute" => ChipMode::Absolute,
+            _ => ChipMode::Both,
+        }
+    }
+}
+
+thread_local! {
+    static SORT: OnceCell<Signal<Sort>> = const { OnceCell::new() };
+    static CHIP: OnceCell<Signal<ChipMode>> = const { OnceCell::new() };
+    static OVERLAY: OnceCell<Signal<bool>> = const { OnceCell::new() };
+}
+
+pub fn sort() -> Signal<Sort> {
+    SORT.with(|cell| {
+        *cell.get_or_init(|| {
+            let seed = day_part_prefs::get(PREF_SORT)
+                .map(|s| Sort::from_key(&s))
+                .unwrap_or(Sort::Manual);
+            Scope::detached().enter(|| Signal::new(seed))
+        })
+    })
+}
+
+pub fn set_sort(v: Sort) {
+    day_part_prefs::set(PREF_SORT, v.key());
+    sort().set(v);
+}
+
+pub fn chip_mode() -> Signal<ChipMode> {
+    CHIP.with(|cell| {
+        *cell.get_or_init(|| {
+            let seed = day_part_prefs::get(PREF_CHIP)
+                .map(|s| ChipMode::from_key(&s))
+                .unwrap_or(ChipMode::Both);
+            Scope::detached().enter(|| Signal::new(seed))
+        })
+    })
+}
+
+/// Advance every chip one step and remember it.
+pub fn cycle_chip_mode() {
+    let next = chip_mode().get_untracked().next();
+    day_part_prefs::set(PREF_CHIP, next.key());
+    chip_mode().set(next);
+}
+
+/// Whether the detail chart draws its moving-average overlays.
+pub fn overlay() -> Signal<bool> {
+    OVERLAY.with(|cell| {
+        *cell.get_or_init(|| {
+            let seed = day_part_prefs::get(PREF_OVERLAY).is_none_or(|s| s != "0");
+            Scope::detached().enter(|| Signal::new(seed))
+        })
+    })
+}
+
+/// Write the overlay preference to disk WITHOUT touching the signal.
+///
+/// The toggle is bound two-way to [`overlay`], so the signal already carries the user's choice
+/// by the time anything wants to persist it. A persist function that also `set` the signal
+/// would close a loop with the effect that watches it — the effect reads, writes, and re-reads
+/// until the reactive runtime trips its cycle guard and the main thread stops responding.
+pub fn persist_overlay(on: bool) {
+    day_part_prefs::set(PREF_OVERLAY, if on { "1" } else { "0" });
+}
+
+/// The watchlist in display order: the user's own arrangement, or a view sorted by name or by
+/// today's move. Symbols still loading sort last under `Change` rather than jumping around as
+/// each fetch lands.
+pub fn sorted_symbols(list: Vec<String>, order: Sort) -> Vec<String> {
+    let mut out = list;
+    match order {
+        Sort::Manual => {}
+        Sort::Name => out.sort(),
+        Sort::Change => out.sort_by(|a, b| {
+            let pct = |s: &String| {
+                resource_for(s)
+                    .signal()
+                    .with(|l| l.ready().map(|q| q.change_pct()))
+            };
+            match (pct(a), pct(b)) {
+                (Some(x), Some(y)) => y.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Equal),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => a.cmp(b),
+            }
+        }),
+    }
+    out
+}
+
+/// Today's breadth across the watchlist: how many symbols are up, how many down, and the
+/// biggest mover in each direction. `None` until at least one quote has loaded.
+pub struct Breadth {
+    pub up: usize,
+    pub down: usize,
+    pub best: Option<(String, f64)>,
+    pub worst: Option<(String, f64)>,
+}
+
+pub fn breadth(list: &[String]) -> Option<Breadth> {
+    let mut b = Breadth {
+        up: 0,
+        down: 0,
+        best: None,
+        worst: None,
+    };
+    let mut any = false;
+    for s in list {
+        let Some(pct) = resource_for(s)
+            .signal()
+            .with(|l| l.ready().map(|q| q.change_pct()))
+        else {
+            continue;
+        };
+        any = true;
+        if pct >= 0.0 {
+            b.up += 1;
+        } else {
+            b.down += 1;
+        }
+        if b.best.as_ref().is_none_or(|(_, v)| pct > *v) {
+            b.best = Some((s.clone(), pct));
+        }
+        if b.worst.as_ref().is_none_or(|(_, v)| pct < *v) {
+            b.worst = Some((s.clone(), pct));
+        }
+    }
+    any.then_some(b)
 }
 
 fn generation() -> Signal<u64> {

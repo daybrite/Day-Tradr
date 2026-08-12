@@ -19,6 +19,13 @@ fn faded(c: Color, a: f64) -> Color {
     Color::rgba(c.r, c.g, c.b, a)
 }
 
+/// The moving-average overlays. Deliberately NOT the trend colors: the averages are reference
+/// lines, and reusing green/red would read as a second opinion on the day's direction. Blue and
+/// amber stay legible on both themes and are distinguishable in the common color-blindness
+/// forms, where green-vs-red is not.
+pub const SMA20_COLOR: Color = Color::rgba(0.25, 0.55, 1.0, 0.95);
+pub const SMA50_COLOR: Color = Color::rgba(0.98, 0.68, 0.12, 0.95);
+
 /// Price up/flat vs the window's first close → the Stocks green; down → the Stocks red.
 pub fn trend_color(up: bool) -> Color {
     if up {
@@ -176,6 +183,42 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
             x += dash * 2.0;
         }
 
+        // Moving-average overlays UNDER the price line, so the price always reads on top.
+        // Each is drawn only where it exists (an SMA has no value until it has N samples), and
+        // both are computed over the FULL history rather than the visible window — a 50-day
+        // average of a 22-day window would otherwise be a 22-day average wearing the wrong
+        // label. Hidden when the range is too short for even the fast average to appear.
+        if crate::quotes::overlay().get() {
+            let from = q.closes.len() - closes.len();
+            for (period, color) in [(20usize, SMA20_COLOR), (50usize, SMA50_COLOR)] {
+                let series = crate::quotes::sma_series(&q.closes, period);
+                let mut run: Vec<Point> = Vec::new();
+                for (i, _) in closes.iter().enumerate() {
+                    match series[from + i] {
+                        Some(v) if v >= min && v <= max => {
+                            let fx = if closes.len() <= 1 {
+                                1.0
+                            } else {
+                                i as f64 / (closes.len() - 1) as f64
+                            };
+                            run.push(Point::new(
+                                inset.origin.x + fx * inset.size.width,
+                                inset.origin.y
+                                    + (1.0 - (v - min) / (max - min)) * inset.size.height,
+                            ));
+                        }
+                        // Off-scale or not yet defined: break the run so the line does not
+                        // leap across the gap.
+                        _ => {
+                            polyline(d, &run, color, 1.25);
+                            run.clear();
+                        }
+                    }
+                }
+                polyline(d, &run, color, 1.25);
+            }
+        }
+
         polyline(d, &pts, line, 2.0);
 
         // Latest price: a soft halo + solid dot.
@@ -281,4 +324,60 @@ pub fn sparkline(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> An
         polyline(d, &pts, line, 1.5);
     })
     .frame(84.0, 30.0)
+}
+
+/// A low → high band with the current price marked on it: the reading a stats cell cannot give,
+/// which is where today's price sits *within* a range. Used for both the session range and the
+/// 52-week range on the detail page.
+///
+/// The TRACK only — the endpoint numbers are real labels beside it (see `detail::range_row`),
+/// because canvas text carries neither the reader's font scale nor RTL mirroring. Drawn as a
+/// canvas because the marker's position is a fraction of the track's measured width, which only
+/// the draw pass knows.
+pub fn range_bar(
+    quote: Signal<day::reactive::Load<crate::quotes::Quote>>,
+    lo: impl Fn(&crate::quotes::Quote) -> f64 + 'static,
+    hi: impl Fn(&crate::quotes::Quote) -> f64 + 'static,
+) -> AnyPiece {
+    canvas(move |d, size| {
+        let Some(q) = quote.with(|l| l.ready().cloned()) else {
+            return;
+        };
+        let dark = day::dark_mode();
+        let (lo_v, hi_v) = (lo(&q), hi(&q));
+        let track_h = 5.0;
+        let y = 9.0;
+        let w = size.width;
+        if w < 40.0 {
+            return;
+        }
+        // The track: a full-width capsule in a neutral fill, so the marker reads as the
+        // information and the band as the backdrop.
+        d.fill(
+            Shape::RoundedRect(Rect::new(0.0, y, w, track_h), track_h / 2.0),
+            grid_color(dark),
+        );
+        // The filled portion, in the day's trend color, from the low up to the price.
+        let t = q.position_in(lo_v, hi_v);
+        let line = trend_color(q.change() >= 0.0);
+        d.fill(
+            Shape::RoundedRect(
+                Rect::new(0.0, y, (w * t).max(track_h), track_h),
+                track_h / 2.0,
+            ),
+            faded(line, 0.55),
+        );
+        // The marker, clamped inside the track so it never half-hangs off either end.
+        let cx = (w * t).clamp(5.0, w - 5.0);
+        d.fill(
+            Shape::Ellipse(Rect::new(cx - 6.0, y + track_h / 2.0 - 6.0, 12.0, 12.0)),
+            faded(line, 0.22),
+        );
+        d.fill(
+            Shape::Ellipse(Rect::new(cx - 3.5, y + track_h / 2.0 - 3.5, 7.0, 7.0)),
+            line,
+        );
+    })
+    .height(20.0)
+    .grow_w()
 }

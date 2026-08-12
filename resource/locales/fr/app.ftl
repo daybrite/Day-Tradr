@@ -17,13 +17,10 @@ detail_loading = Chargement des cours…
 detail_error = Échec du chargement : { $error }
 
 stat_open = Ouverture
-stat_high = Haut
-stat_low = Bas
 stat_volume = Volume
-stat_52w_high = Haut 52 sem.
-stat_52w_low = Bas 52 sem.
 stat_prev_close = Clôture préc.
 stat_sma20 = MM 20
+stat_sma50 = MM 50
 stat_days = Séances
 
 manage_list_section = Symboles suivis
@@ -57,3 +54,24 @@ settings_refresh_hint = Recharger tous les symboles suivis depuis la source.
 settings_refresh = Tout actualiser
 
 open_in_new_window = Ouvrir dans une nouvelle fenêtre
+
+# Résumé et tri de la liste de suivi
+breadth_up = En hausse
+breadth_down = En baisse
+breadth_best = Meilleure { $pct }
+breadth_worst = Pire { $pct }
+sort_manual = Personnalisé
+sort_name = Nom
+sort_change = Variation
+watchlist_empty = Aucun symbole suivi
+watchlist_empty_hint = Ajoutez-en un depuis la page Symboles.
+
+# Superpositions du graphique et barres d'amplitude
+overlay_label = Moyennes
+overlay_sma20 = 20 jours
+overlay_sma50 = 50 jours
+range_day = Amplitude du jour
+range_52w = Amplitude 52 semaines
+chip_both = Variation + %
+chip_percent = Pourcentage
+chip_absolute = Variation
