@@ -267,10 +267,7 @@ pub fn watchlist_page() -> AnyPiece {
             // on a 392dp phone the localized segments alone eat the row and the button lands
             // off-screen — so there they stack instead.
             when(
-                {
-                    let names = sort_names.clone();
-                    move || !list.get().is_empty() && !compact_width()
-                },
+                move || !list.get().is_empty() && !compact_width(),
                 {
                     let names = sort_names.clone();
                     move || {
