@@ -266,22 +266,19 @@ pub fn watchlist_page() -> AnyPiece {
             // a three-segment picker AND the chip button; at compact width that overflows —
             // on a 392dp phone the localized segments alone eat the row and the button lands
             // off-screen — so there they stack instead.
-            when(
-                move || !list.get().is_empty() && !compact_width(),
-                {
-                    let names = sort_names.clone();
-                    move || {
-                        row((
-                            picker(names.clone(), sort_ix).segmented().id("sort-picker"),
-                            spacer(),
-                            chip_mode_button(),
-                        ))
-                        .spacing(10.0)
-                        .align(VAlign::Center)
-                        .grow_w()
-                    }
-                },
-            ),
+            when(move || !list.get().is_empty() && !compact_width(), {
+                let names = sort_names.clone();
+                move || {
+                    row((
+                        picker(names.clone(), sort_ix).segmented().id("sort-picker"),
+                        spacer(),
+                        chip_mode_button(),
+                    ))
+                    .spacing(10.0)
+                    .align(VAlign::Center)
+                    .grow_w()
+                }
+            }),
             when(
                 move || !list.get().is_empty() && compact_width(),
                 move || {
