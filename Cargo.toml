@@ -29,12 +29,15 @@ crate-type = ["rlib"]
 
 [dependencies]
 day = { git = "https://github.com/daybrite/day.git" }
-# Watchlist persistence (docs/prefs.md) and the stooq quote fetches over the platform HTTP
-# stack (docs/http.md) — system proxies and TLS come from the OS; ureq+rustls only on
+# Watchlist persistence (docs/prefs.md) and the Yahoo Finance quote fetches over the platform
+# HTTP stack (docs/http.md) — system proxies and TLS come from the OS; ureq+rustls only on
 # Linux/OHOS.
 day-part-prefs = { git = "https://github.com/daybrite/day.git" }
 day-piece-settings = { git = "https://github.com/daybrite/day.git" }
 day-part-http = { git = "https://github.com/daybrite/day.git" }
+# The quote endpoint answers JSON (Yahoo retired the CSV download in 2024 — see src/quotes.rs),
+# so the data layer needs a parser. Same crate Day-Skies uses for its forecast API.
+serde_json = "1"
 
 [build-dependencies]
 day-build = { git = "https://github.com/daybrite/day.git" }

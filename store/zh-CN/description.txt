@@ -12,8 +12,8 @@ Day Tradr 是一份自选列表，只装你真正关注的代码，数字的排�
 
 收盘行情
 
-数据来自 stooq.com 的免费收盘行情。这不是实时行情，Day Tradr 也不是交易应用：没有账号，不连接券商，这里没有任何东西可买可卖。
+数据来自 Yahoo Finance 的免费收盘行情。这不是实时行情，Day Tradr 也不是交易应用：没有账号，不连接券商，这里没有任何东西可买可卖。
 
 开源项目，基于 Day 框架构建——一份 Rust 代码，在每个平台上用真正的原生控件绘制自己。github.com/daybrite/Day-Tradr
 
-数据来自 stooq.com。
+数据来自 Yahoo Finance。

@@ -11,7 +11,7 @@ nav_settings = الإعدادات
 watchlist_title = قائمة المتابعة
 data_mock = بيانات تجريبية · قيم حتمية
 data_live = بيانات مباشرة
-data_attribution = البيانات من stooq.com — أسعار إغلاق مجانية.
+data_attribution = البيانات من Yahoo Finance — أسعار إغلاق مجانية.
 
 detail_loading = جارٍ تحميل الأسعار…
 detail_error = تعذر التحميل: { $error }
@@ -29,7 +29,7 @@ stat_days = الجلسات
 manage_list_section = الرموز المتابَعة
 manage_add_section = إضافة رمز
 manage_symbol_label = الرمز
-manage_symbol_hint = بصيغة stooq — AAPL.US أو XAUUSD أو CL.F. حالة الأحرف لا تهم.
+manage_symbol_hint = رمز Yahoo — AAPL أو SPY أو GC=F أو EURUSD=X. حالة الأحرف لا تهم.
 manage_add = إضافة
 manage_preset_label = اقتراحات
 manage_add_preset = إضافة المحدد
@@ -44,7 +44,7 @@ settings_name_label = الاسم
 settings_version_label = الإصدار
 settings_build_label = تاريخ البناء
 settings_website = بُني بإطار Day — daybrite.dev
-settings_data_link = مصدر البيانات — stooq.com
+settings_data_link = مصدر البيانات — Yahoo Finance
 settings_language_section = اللغة
 settings_language_label = اللغة
 settings_system = النظام

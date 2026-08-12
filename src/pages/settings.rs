@@ -33,7 +33,8 @@ pub fn settings_page() -> AnyPiece {
                     label(env!("DAY_TRADR_BUILD_DATE")).id("about-build"),
                 ),
                 link(res::str::settings_website(), "https://daybrite.dev").id("about-day"),
-                link(res::str::settings_data_link(), "https://stooq.com").id("about-stooq"),
+                link(res::str::settings_data_link(), "https://finance.yahoo.com")
+                    .id("about-source"),
             ))
             .title(res::str::settings_about_section()),
         ),

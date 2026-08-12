@@ -12,8 +12,8 @@ CE QUE VOUS OBTENEZ
 
 COURS DE CLÔTURE
 
-Les données viennent des cours de clôture gratuits de stooq.com. Ce n'est pas un flux en temps réel et Day Tradr n'est pas une application de trading : il n'y a pas de compte, pas de connexion à un courtier, et rien à acheter ni à vendre ici.
+Les données viennent des cours de clôture gratuits de Yahoo Finance. Ce n'est pas un flux en temps réel et Day Tradr n'est pas une application de trading : il n'y a pas de compte, pas de connexion à un courtier, et rien à acheter ni à vendre ici.
 
 Open source, construit avec le framework Day — une seule base de code Rust qui se dessine avec les vrais widgets natifs de chaque plateforme. github.com/daybrite/Day-Tradr
 
-Données par stooq.com.
+Données par Yahoo Finance.

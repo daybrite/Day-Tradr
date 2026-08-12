@@ -11,7 +11,7 @@ nav_settings = 设置
 watchlist_title = 自选列表
 data_mock = 模拟数据 · 确定性样本
 data_live = 实时数据
-data_attribution = 数据来自 stooq.com — 免费收盘行情。
+data_attribution = 数据来自 Yahoo Finance — 免费收盘行情。
 
 detail_loading = 正在加载行情…
 detail_error = 加载失败：{ $error }
@@ -29,7 +29,7 @@ stat_days = 交易日
 manage_list_section = 已跟踪代码
 manage_add_section = 添加代码
 manage_symbol_label = 代码
-manage_symbol_hint = stooq 格式 — AAPL.US、XAUUSD、CL.F。不区分大小写。
+manage_symbol_hint = Yahoo 代码 — AAPL、SPY、GC=F、EURUSD=X。不区分大小写。
 manage_add = 添加
 manage_preset_label = 建议
 manage_add_preset = 添加所选
@@ -44,7 +44,7 @@ settings_name_label = 名称
 settings_version_label = 版本
 settings_build_label = 构建日期
 settings_website = 基于 Day 构建 — daybrite.dev
-settings_data_link = 数据来源 — stooq.com
+settings_data_link = 数据来源 — Yahoo Finance
 settings_language_section = 语言
 settings_language_label = 语言
 settings_system = 系统

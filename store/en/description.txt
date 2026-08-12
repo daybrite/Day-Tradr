@@ -12,8 +12,8 @@ WHAT YOU GET
 
 END-OF-DAY QUOTES
 
-Data comes from stooq.com's free end-of-day quotes. This is not a real-time feed and Day Tradr is not a trading app: there is no account, no brokerage connection, and nothing to buy or sell here.
+Data comes from Yahoo Finance's free end-of-day quotes. This is not a real-time feed and Day Tradr is not a trading app: there is no account, no brokerage connection, and nothing to buy or sell here.
 
 Open source, built with the Day framework — one Rust codebase drawing itself with each platform's real native widgets. github.com/daybrite/Day-Tradr
 
-Data by stooq.com.
+Data by Yahoo Finance.

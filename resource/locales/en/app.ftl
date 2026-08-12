@@ -13,7 +13,7 @@ nav_settings = Settings
 watchlist_title = Watchlist
 data_mock = Mock data · deterministic fixtures
 data_live = Live data
-data_attribution = Data by stooq.com — free end-of-day quotes.
+data_attribution = Data by Yahoo Finance — free end-of-day quotes.
 
 detail_loading = Loading quotes…
 detail_error = Could not load: { $error }
@@ -31,7 +31,7 @@ stat_days = Sessions
 manage_list_section = Tracked symbols
 manage_add_section = Add a symbol
 manage_symbol_label = Ticker
-manage_symbol_hint = stooq format — AAPL.US, XAUUSD, CL.F. Case does not matter.
+manage_symbol_hint = Yahoo ticker — AAPL, SPY, GC=F, EURUSD=X. Case does not matter.
 manage_add = Add
 manage_preset_label = Suggestions
 manage_add_preset = Add selected
@@ -46,7 +46,7 @@ settings_name_label = Name
 settings_version_label = Version
 settings_build_label = Built
 settings_website = Built with Day — daybrite.dev
-settings_data_link = Data source — stooq.com
+settings_data_link = Data source — Yahoo Finance
 settings_language_section = Language
 settings_language_label = Language
 settings_system = System

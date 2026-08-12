@@ -1,4 +1,4 @@
-//! Manage the watchlist: add a symbol by ticker (stooq format, e.g. `AAPL.US`, `XAUUSD`),
+//! Manage the watchlist: add a symbol by ticker (Yahoo Finance format, e.g. `AAPL`, `GC=F`),
 //! add from a picker of suggestions, and remove tracked rows. Mirrors the Apple Stocks
 //! edit sheet as a plain form page.
 
@@ -95,7 +95,7 @@ pub fn manage_page() -> AnyPiece {
                     labeled(
                         res::str::manage_symbol_label(),
                         text_field(entry)
-                            .placeholder("AAPL.US".to_string())
+                            .placeholder("AAPL".to_string())
                             .id("sym-field"),
                     ),
                     label(res::str::manage_symbol_hint()).font(Font::Footnote),

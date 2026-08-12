@@ -12,23 +12,23 @@ flow:
   - wait_for: { id: nav }
   - wait_for: { id: watchlist-title }
   - assert_text: { id: data-source, key: data_mock }
-  - assert_text: { id: wl-price-AAPL.US, text: "226.43" }
-  - assert_text: { id: wl-chg-AAPL.US, text: "−0.94 (0.41%)" }
-  - assert_text: { id: wl-price-XAUUSD, text: "3380.88" }
+  - assert_text: { id: wl-price-AAPL, text: "230.04" }
+  - assert_text: { id: wl-chg-AAPL, text: "−0.45 (0.20%)" }
+  - assert_text: { id: "wl-price-GC=F", text: "3203.55" }
   - screenshot: watchlist
 
   # A watchlist card is tappable through to the detail page.
-  - tap: { id: wl-row-MSFT.US }
-  - assert_route: { route: MSFT.US }
+  - tap: { id: wl-row-MSFT }
+  - assert_route: { route: MSFT }
   - wait_for: { id: detail-price }
-  - assert_text: { id: detail-price, text: "481.83" }
+  - assert_text: { id: detail-price, text: "514.52" }
   - assert_text: { id: detail-name, text: "Microsoft Corp." }
 
   # Direct navigation by symbol key; the shared range picker re-slices the canvas chart.
-  - navigate: { route: AAPL.US }
+  - navigate: { route: AAPL }
   - wait_for: { id: detail-price }
-  - assert_text: { id: detail-price, text: "226.43" }
-  - assert_text: { id: detail-chg, text: "−0.94 (0.41%)" }
+  - assert_text: { id: detail-price, text: "230.04" }
+  - assert_text: { id: detail-chg, text: "−0.45 (0.20%)" }
   - select: { id: range-picker, index: 0 }
   - screenshot: detail-1m
   - select: { id: range-picker, index: 3 }
@@ -38,15 +38,15 @@ flow:
   # reruns start from the same list.
   - navigate: { route: manage }
   - wait_for: { id: sym-field }
-  - input: { id: sym-field, text: "gc.f" }
+  - input: { id: sym-field, text: "si=f" }
   - tap: { id: sym-add }
   - assert_text: { id: sym-status, key: manage_status_added }
   - tap: { id: sym-add }
   - assert_text: { id: sym-status, key: manage_status_empty }
   - screenshot: manage
-  - navigate: { route: GC.F }
+  - navigate: { route: "SI=F" }
   - wait_for: { id: detail-price }
-  - assert_text: { id: detail-symbol, text: "GC.F" }
+  - assert_text: { id: detail-symbol, text: "SI=F" }
   - navigate: { route: manage }
   - wait_for: { id: sym-field }
   # The watchlist rows live in a recycling list (docs/list.md): rows realize lazily, and the
@@ -54,9 +54,9 @@ flow:
   # (which addresses rows by index, realized or not), then remove it. Removing it from the
   # front restores the original order, and the final swap-and-back exercises reorder alone.
   - scroll_to: { id: sym-rows }
-  # The 6 default symbols occupy rows 0–5, so the just-added GC.F sits at row 6.
+  # The 6 default symbols occupy rows 0–5, so the just-added SI=F sits at row 6.
   - reorder: { id: sym-rows, from: 6, to: 0 }
-  - tap: { id: sym-remove-GC.F }
+  - tap: { id: "sym-remove-SI=F" }
   - assert_text: { id: sym-status, key: manage_status_removed }
   - reorder: { id: sym-rows, from: 1, to: 0 }
   - reorder: { id: sym-rows, from: 0, to: 1 }
@@ -69,6 +69,6 @@ flow:
   - navigate: { route: settings }
   - wait_for: { id: language-picker }
   - assert_text: { id: about-version, text: "0.1.0" }
-  - assert_visible: { id: about-stooq }
+  - assert_visible: { id: about-source }
   - assert_visible: { id: refresh-all }
   - screenshot: settings

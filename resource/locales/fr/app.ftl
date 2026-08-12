@@ -11,7 +11,7 @@ nav_settings = Réglages
 watchlist_title = Liste de suivi
 data_mock = Données fictives · valeurs déterministes
 data_live = Données en direct
-data_attribution = Données stooq.com — cours de clôture gratuits.
+data_attribution = Données Yahoo Finance — cours de clôture gratuits.
 
 detail_loading = Chargement des cours…
 detail_error = Échec du chargement : { $error }
@@ -29,7 +29,7 @@ stat_days = Séances
 manage_list_section = Symboles suivis
 manage_add_section = Ajouter un symbole
 manage_symbol_label = Symbole
-manage_symbol_hint = Format stooq — AAPL.US, XAUUSD, CL.F. La casse est ignorée.
+manage_symbol_hint = Symbole Yahoo — AAPL, SPY, GC=F, EURUSD=X. La casse est ignorée.
 manage_add = Ajouter
 manage_preset_label = Suggestions
 manage_add_preset = Ajouter la sélection
@@ -44,7 +44,7 @@ settings_name_label = Nom
 settings_version_label = Version
 settings_build_label = Compilé le
 settings_website = Construit avec Day — daybrite.dev
-settings_data_link = Source des données — stooq.com
+settings_data_link = Source des données — Yahoo Finance
 settings_language_section = Langue
 settings_language_label = Langue
 settings_system = Système

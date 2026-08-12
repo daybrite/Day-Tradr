@@ -1,13 +1,23 @@
-//! The data layer: the persisted watchlist, stooq.com fetches, deterministic mock series, and
-//! one memoized reactive [`Resource`] per symbol (https://daybrite.dev/docs/async).
+//! The data layer: the persisted watchlist, Yahoo Finance fetches, deterministic mock series,
+//! and one memoized reactive [`Resource`] per symbol (https://daybrite.dev/docs/async).
 //!
-//! Live data comes from two stooq CSV endpoints over day-part-http (docs/http.md):
-//! `https://stooq.com/q/l/?s=<sym>&f=snd2t2ohlcv&h&e=csv` (the current quote + display name)
-//! and `https://stooq.com/q/d/l/?s=<sym>&i=d` (daily history — Date,Open,High,Low,Close,Volume).
-//! CAVEAT (verified 2026-08-01): stooq fronts these with a JavaScript proof-of-work wall and
-//! denies the CSV downloads outright from some network classes even after verification, so
-//! live mode may show the error state depending on where the app runs. The path stays correct
-//! for networks stooq still serves; TRADR_MOCK=1 is the deterministic showcase either way.
+//! Live data comes from ONE unofficial Yahoo Finance endpoint over day-part-http (docs/http.md):
+//! `https://query1.finance.yahoo.com/v8/finance/chart/<sym>?range=2y&interval=1d`. The response
+//! carries the daily history AND the current quote (`meta`) together, so a symbol costs a single
+//! request rather than a history call plus a quote call.
+//!
+//! WHY NOT the CSV download endpoint (`/v7/finance/download/<sym>`): Yahoo closed it to anonymous
+//! callers in 2024 — it answers `401 {"code":"unauthorized"}` without a session cookie and a
+//! matching `crumb` token (verified again 2026-08-11 on `query1` and `query2`). Reaching it means
+//! scraping a cookie + crumb before every fetch, which is both fragile and exactly the flakiness
+//! this app moved away from. The `v8/chart` JSON endpoint needs no cookie, no crumb, and no API
+//! key; it does require a `User-Agent` (an absent one draws `429`), so [`get_text`] sends the
+//! app's own.
+//!
+//! Symbols are Yahoo tickers as typed on finance.yahoo.com: `AAPL`, `SPY`, futures as `CL=F` /
+//! `GC=F`, FX as `EURUSD=X`. Watchlists saved by an older build used the previous provider's
+//! spelling, so [`migrate_symbol`] rewrites those on load.
+//!
 //! Mock mode (`--env TRADR_MOCK=1`, read through `day::env` so it reaches web-dom as a query
 //! parameter) generates every series from an integer LCG — no floats-in, no transcendentals —
 //! so the SAME prices render on every target and dayscript can assert them verbatim.
@@ -20,31 +30,51 @@ const PREF_SYMBOLS: &str = "tradr.symbols";
 
 /// A fresh install tracks a spread of stocks, an ETF, and two commodities. (TSLA stays in
 /// [`PRESETS`], so it can still be added from the manage page.)
-const DEFAULT_SYMBOLS: [&str; 6] = ["AAPL.US", "MSFT.US", "NVDA.US", "SPY.US", "XAUUSD", "CL.F"];
+const DEFAULT_SYMBOLS: [&str; 6] = ["AAPL", "MSFT", "NVDA", "SPY", "GC=F", "CL=F"];
 
 /// Display names + mock price anchors for the symbols the app suggests. Live mode overwrites
-/// the name with what stooq reports; provider data and tickers are proper nouns, deliberately
+/// the name with what Yahoo reports; provider data and tickers are proper nouns, deliberately
 /// not localized. The anchor keeps mock charts in a plausible band per instrument.
 const NAMES: [(&str, &str, f64); 12] = [
-    ("AAPL.US", "Apple Inc.", 230.0),
-    ("MSFT.US", "Microsoft Corp.", 500.0),
-    ("NVDA.US", "NVIDIA Corp.", 175.0),
-    ("TSLA.US", "Tesla Inc.", 320.0),
-    ("SPY.US", "SPDR S&P 500 ETF", 630.0),
-    ("GOOG.US", "Alphabet Inc.", 195.0),
-    ("AMZN.US", "Amazon.com Inc.", 230.0),
-    ("META.US", "Meta Platforms Inc.", 710.0),
-    ("XAUUSD", "Gold Spot", 3350.0),
-    ("XAGUSD", "Silver Spot", 38.0),
-    ("CL.F", "Crude Oil WTI", 68.0),
-    ("EURUSD", "Euro / US Dollar", 1.16),
+    ("AAPL", "Apple Inc.", 230.0),
+    ("MSFT", "Microsoft Corp.", 500.0),
+    ("NVDA", "NVIDIA Corp.", 175.0),
+    ("TSLA", "Tesla Inc.", 320.0),
+    ("SPY", "SPDR S&P 500 ETF", 630.0),
+    ("GOOG", "Alphabet Inc.", 195.0),
+    ("AMZN", "Amazon.com Inc.", 230.0),
+    ("META", "Meta Platforms Inc.", 710.0),
+    ("GC=F", "Gold Futures", 3350.0),
+    ("SI=F", "Silver Futures", 38.0),
+    ("CL=F", "Crude Oil WTI", 68.0),
+    ("EURUSD=X", "Euro / US Dollar", 1.16),
 ];
 
 /// The symbols offered by the manage page's picker (a superset of the defaults).
 pub const PRESETS: [&str; 12] = [
-    "AAPL.US", "MSFT.US", "NVDA.US", "TSLA.US", "GOOG.US", "AMZN.US", "META.US", "SPY.US",
-    "XAUUSD", "XAGUSD", "CL.F", "EURUSD",
+    "AAPL", "MSFT", "NVDA", "TSLA", "GOOG", "AMZN", "META", "SPY", "GC=F", "SI=F", "CL=F",
+    "EURUSD=X",
 ];
+
+/// Rewrite a watchlist entry saved by a build that used the previous provider's tickers. Yahoo
+/// spells US equities bare (`AAPL`, not `AAPL.US`) and quotes metals and oil as futures
+/// contracts rather than spot, so an upgrade would otherwise show every saved row as an unknown
+/// symbol. Anything already in Yahoo's spelling passes through untouched.
+fn migrate_symbol(symbol: &str) -> String {
+    const LEGACY: [(&str, &str); 4] = [
+        ("XAUUSD", "GC=F"),
+        ("XAGUSD", "SI=F"),
+        ("CL.F", "CL=F"),
+        ("EURUSD", "EURUSD=X"),
+    ];
+    if let Some((_, yahoo)) = LEGACY.iter().find(|(old, _)| *old == symbol) {
+        return (*yahoo).to_string();
+    }
+    match symbol.strip_suffix(".US") {
+        Some(base) => base.to_string(),
+        None => symbol.to_string(),
+    }
+}
 
 pub fn preset_name(symbol: &str) -> &str {
     NAMES
@@ -149,12 +179,14 @@ thread_local! {
 pub fn symbols() -> Signal<Vec<String>> {
     SYMBOLS.with(|cell| {
         *cell.get_or_init(|| {
-            let seed = match day_part_prefs::get(PREF_SYMBOLS) {
+            let seed: Vec<String> = match day_part_prefs::get(PREF_SYMBOLS) {
                 // A saved list wins, even an empty one; a fresh install gets the defaults.
+                // Entries saved under the previous provider's tickers are rewritten on the way
+                // in, so an upgrade keeps its watchlist instead of showing unknown symbols.
                 Some(joined) => joined
                     .split(',')
                     .filter(|s| !s.is_empty())
-                    .map(str::to_owned)
+                    .map(migrate_symbol)
                     .collect(),
                 None => DEFAULT_SYMBOLS.iter().map(|s| s.to_string()).collect(),
             };
@@ -175,7 +207,7 @@ fn persist(list: &[String]) {
     day_part_prefs::set(PREF_SYMBOLS, &list.join(","));
 }
 
-/// Normalize what the user typed into a stooq symbol: trimmed, uppercased.
+/// Normalize what the user typed into a Yahoo ticker: trimmed, uppercased.
 pub fn normalize(input: &str) -> String {
     input.trim().to_ascii_uppercase()
 }
@@ -364,56 +396,49 @@ fn mock_date(i: usize, days: usize) -> String {
 // Live fetch + CSV processing.
 // ---------------------------------------------------------------------------
 
+/// Two years of daily bars: enough for the widest range the picker offers (1Y = 252 trading
+/// days) plus the 52-week statistics, in one response.
+const CHART_URL: &str = "https://query1.finance.yahoo.com/v8/finance/chart/";
+
 async fn fetch(symbol: String) -> Result<Quote, QuoteError> {
-    let sym = symbol.to_ascii_lowercase();
-    let history_url = format!("https://stooq.com/q/d/l/?s={sym}&i=d");
-    let quote_url = format!("https://stooq.com/q/l/?s={sym}&f=snd2t2ohlcv&h&e=csv");
+    // Percent-encode the ticker: futures and FX carry `=` (`CL=F`, `EURUSD=X`), which is legal
+    // in a path segment but not worth betting the request on.
+    let url = format!(
+        "{CHART_URL}{}?range=2y&interval=1d",
+        percent_encode(&symbol)
+    );
+    let body = get_text(&url).await?;
+    parse_chart(&body, &symbol)
+}
 
-    let history = get_text(&history_url).await?;
-    let (closes, volumes, dates) = parse_history(&history, &symbol)?;
-
-    // The quote endpoint refines the latest numbers + supplies the display name; a failure
-    // here degrades to history-derived values rather than failing the symbol.
-    let (name, open, high, low, close, volume) = match get_text(&quote_url).await {
-        Ok(text) => parse_quote(&text).unwrap_or((String::new(), 0.0, 0.0, 0.0, 0.0, 0.0)),
-        Err(_) => (String::new(), 0.0, 0.0, 0.0, 0.0, 0.0),
-    };
-
-    let last = if close > 0.0 {
-        close
-    } else {
-        *closes
-            .last()
-            .ok_or_else(|| QuoteError(format!("{symbol}: empty history")))?
-    };
-    let prev_close = if closes.len() >= 2 {
-        closes[closes.len() - 2]
-    } else {
-        last
-    };
-    Ok(Quote {
-        name: if name.is_empty() {
-            preset_name(&symbol).to_string()
-        } else {
-            name
-        },
-        symbol,
-        last,
-        prev_close,
-        open,
-        high,
-        low,
-        volume,
-        closes,
-        volumes,
-        dates,
-        mock: false,
-    })
+/// Encode the characters that appear in Yahoo tickers and mean something in a URL.
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 async fn get_text(url: &str) -> Result<String, QuoteError> {
     let resp = day_part_http::fetch_future(
-        day_part_http::Request::get(url).timeout(std::time::Duration::from_secs(15)),
+        day_part_http::Request::get(url)
+            // Yahoo answers `429 Too Many Requests` to a request with no User-Agent, on the
+            // very first call. Identify the app honestly rather than impersonating a browser.
+            .header(
+                "User-Agent",
+                concat!(
+                    "Day-Tradr/",
+                    env!("CARGO_PKG_VERSION"),
+                    " (+https://daybrite.dev)"
+                ),
+            )
+            .timeout(std::time::Duration::from_secs(15)),
     )
     .await
     .map_err(|e| QuoteError(format!("request failed: {e}")))?;
@@ -423,54 +448,116 @@ async fn get_text(url: &str) -> Result<String, QuoteError> {
     Ok(String::from_utf8_lossy(&resp.body).into_owned())
 }
 
-/// Parsed daily history: closes, volumes, and ISO dates, index-aligned, oldest first.
-type History = (Vec<f64>, Vec<f64>, Vec<String>);
+/// `chart.result[0]` → a [`Quote`].
+///
+/// Shape: `meta` holds the live quote (price, day high/low/volume, display name), `timestamp[]`
+/// holds one epoch-second stamp per bar, and `indicators.quote[0]` holds the index-aligned
+/// `open/high/low/close/volume` arrays. Yahoo writes `null` into a bar it has no data for (a
+/// halt, or the not-yet-closed session on some feeds), so rows are kept only where the close is
+/// a number and every array is filtered through the same index.
+///
+/// An unknown ticker answers 200 with `result: null` and an `error` object — surfaced as an
+/// error rather than an empty chart.
+fn parse_chart(body: &str, symbol: &str) -> Result<Quote, QuoteError> {
+    let root: serde_json::Value = serde_json::from_str(body)
+        .map_err(|e| QuoteError(format!("{symbol}: malformed response ({e})")))?;
+    let chart = &root["chart"];
+    if let Some(desc) = chart["error"]["description"].as_str() {
+        return Err(QuoteError(format!("{symbol}: {desc}")));
+    }
+    let result = chart["result"]
+        .get(0)
+        .ok_or_else(|| QuoteError(format!("{symbol}: no data (unknown symbol?)")))?;
+    let meta = &result["meta"];
+    let quote = &result["indicators"]["quote"][0];
 
-/// stooq daily history: `Date,Open,High,Low,Close,Volume` rows, oldest first. An unknown
-/// symbol answers a body with no data rows — surfaced as an error, not an empty chart.
-fn parse_history(csv: &str, symbol: &str) -> Result<History, QuoteError> {
+    let stamps = result["timestamp"].as_array().cloned().unwrap_or_default();
+    let col = |name: &str| -> Vec<serde_json::Value> {
+        quote[name].as_array().cloned().unwrap_or_default()
+    };
+    let (opens, highs, lows, closes_raw, volumes_raw) = (
+        col("open"),
+        col("high"),
+        col("low"),
+        col("close"),
+        col("volume"),
+    );
+
     let mut closes = Vec::new();
     let mut volumes = Vec::new();
     let mut dates = Vec::new();
-    for line in csv.lines().skip(1) {
-        let mut cols = line.split(',');
-        let date = cols.next().unwrap_or_default();
-        let close = cols.nth(3).and_then(|c| c.parse::<f64>().ok());
-        let volume = cols
-            .next()
-            .and_then(|c| c.parse::<f64>().ok())
-            .unwrap_or(0.0);
-        if let Some(close) = close {
-            dates.push(date.to_string());
-            closes.push(close);
-            volumes.push(volume);
-        }
+    let mut last_row = None;
+    for (i, stamp) in stamps.iter().enumerate() {
+        let Some(close) = closes_raw.get(i).and_then(serde_json::Value::as_f64) else {
+            continue; // a gap bar — drop the whole row so the arrays stay aligned
+        };
+        let Some(secs) = stamp.as_i64() else { continue };
+        closes.push(close);
+        volumes.push(
+            volumes_raw
+                .get(i)
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(0.0),
+        );
+        dates.push(iso_date(secs));
+        last_row = Some(i);
     }
     if closes.is_empty() {
         return Err(QuoteError(format!("{symbol}: no data (unknown symbol?)")));
     }
-    Ok((closes, volumes, dates))
-}
 
-/// stooq quote: header + one `Symbol,Name,Date,Time,Open,High,Low,Close,Volume` row. `N/D`
-/// marks fields the source has no value for.
-#[allow(clippy::type_complexity)]
-fn parse_quote(csv: &str) -> Option<(String, f64, f64, f64, f64, f64)> {
-    let line = csv.lines().nth(1)?;
-    let cols: Vec<&str> = line.split(',').collect();
-    let num = |i: usize| -> f64 {
-        cols.get(i)
-            .and_then(|c| c.parse::<f64>().ok())
+    // The day's own numbers come from `meta` when present (they track the live session), and
+    // fall back to the newest kept bar.
+    let bar = |arr: &[serde_json::Value]| -> f64 {
+        last_row
+            .and_then(|i| arr.get(i))
+            .and_then(serde_json::Value::as_f64)
             .unwrap_or(0.0)
     };
-    Some((
-        cols.get(1).unwrap_or(&"").to_string(),
-        num(4),
-        num(5),
-        num(6),
-        num(7),
-        num(8),
-    ))
+    let num = |key: &str| meta[key].as_f64();
+    let last = num("regularMarketPrice").unwrap_or_else(|| closes[closes.len() - 1]);
+    let prev_close = if closes.len() >= 2 {
+        closes[closes.len() - 2]
+    } else {
+        num("chartPreviousClose").unwrap_or(last)
+    };
+    let name = meta["shortName"]
+        .as_str()
+        .or_else(|| meta["longName"].as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| preset_name(symbol).to_string());
+
+    Ok(Quote {
+        name,
+        symbol: symbol.to_string(),
+        last,
+        prev_close,
+        open: bar(&opens),
+        high: num("regularMarketDayHigh").unwrap_or_else(|| bar(&highs)),
+        low: num("regularMarketDayLow").unwrap_or_else(|| bar(&lows)),
+        volume: num("regularMarketVolume").unwrap_or_else(|| bar(&volumes_raw)),
+        closes,
+        volumes,
+        dates,
+        mock: false,
+    })
+}
+
+/// Epoch seconds → `YYYY-MM-DD` (UTC). Yahoo stamps each daily bar at its session open, so the
+/// UTC date is the trading date for every market the app lists. Hinnant's civil-from-days, so
+/// no date crate rides along for one format call.
+fn iso_date(epoch_secs: i64) -> String {
+    let z = epoch_secs.div_euclid(86_400) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 #[cfg(test)]
@@ -481,8 +568,8 @@ mod tests {
     /// change to it fails HERE, on the host, before it fails on a device.
     #[test]
     fn mock_is_deterministic() {
-        let a = mock("AAPL.US");
-        let b = mock("AAPL.US");
+        let a = mock("AAPL");
+        let b = mock("AAPL");
         assert_eq!(a, b);
         assert_eq!(a.closes.len(), 500);
         // Every close is cent-quantized, so 2-decimal formatting is exact everywhere.
@@ -492,11 +579,88 @@ mod tests {
         assert!(a.last > 0.0 && a.low <= a.high);
     }
 
+    /// A real `v8/chart` response, captured 2026-08-11 and trimmed to three bars. Kept
+    /// verbatim (field order, float precision, `longName` beside `shortName`) so the parser is
+    /// tested against what Yahoo actually sends rather than a tidied-up idea of it.
+    const AAPL_JSON: &str = r#"{"chart":{"result":[{"meta":{"currency":"USD","symbol":"AAPL","shortName":"Apple Inc.","longName":"Apple Inc.","regularMarketPrice":304.91,"chartPreviousClose":309.38,"regularMarketDayHigh":309.97,"regularMarketDayLow":302.79,"regularMarketVolume":34168163},"timestamp":[1786109400,1786368600,1786455000],"indicators":{"quote":[{"open":[311.45001220703125,306.8299865722656,307.75],"high":[314.80999755859375,308.260009765625,309.9700012207031],"low":[310.739990234375,304.6099853515625,302.7900085449219],"close":[313.3299865722656,308.260009765625,304.9100036621094],"volume":[34437200,44812500,34168163]}]}}],"error":null}}"#;
+
+    /// A futures ticker (`=` in the symbol) with a `null` bar — Yahoo's spelling for a session
+    /// it has no data for. Captured from the same endpoint and trimmed the same way.
+    const GOLD_JSON: &str = r#"{"chart":{"result":[{"meta":{"currency":"USD","symbol":"GC=F","shortName":"Gold Dec 26","regularMarketPrice":4467.3,"chartPreviousClose":4452.1,"regularMarketDayHigh":4478.0,"regularMarketDayLow":4441.2,"regularMarketVolume":1234},"timestamp":[1786109400,1786368600,1786455000],"indicators":{"quote":[{"open":[4450.0,null,4460.1],"high":[4470.0,null,4478.0],"low":[4440.0,null,4441.2],"close":[4452.1,null,4467.3],"volume":[900,null,1234]}]}}],"error":null}}"#;
+
+    /// What an unknown ticker answers: HTTP 200 with `result: null` and an error object.
+    const UNKNOWN_JSON: &str = r#"{"chart":{"result":null,"error":{"code":"Not Found","description":"No data found, symbol may be delisted"}}}"#;
+
     #[test]
-    fn history_parses_and_rejects_empty() {
-        let csv = "Date,Open,High,Low,Close,Volume\n2026-07-01,1,2,0.5,1.5,100\n";
-        let (c, v, d) = parse_history(csv, "X").unwrap();
-        assert_eq!((c[0], v[0], d[0].as_str()), (1.5, 100.0, "2026-07-01"));
-        assert!(parse_history("Date,Open,High,Low,Close,Volume\n", "X").is_err());
+    fn chart_parses_a_real_response() {
+        let q = parse_chart(AAPL_JSON, "AAPL").unwrap();
+        assert_eq!(q.name, "Apple Inc.");
+        assert_eq!(q.symbol, "AAPL");
+        assert!(!q.mock);
+        // History, oldest → newest, index-aligned across all three vectors.
+        assert_eq!(q.closes.len(), 3);
+        assert_eq!(q.volumes.len(), 3);
+        assert_eq!(q.dates, ["2026-08-07", "2026-08-10", "2026-08-11"]);
+        assert_eq!(q.volumes[0], 34_437_200.0);
+        // `meta` wins for the live session; prev close is the bar before the newest.
+        assert_eq!(q.last, 304.91);
+        assert_eq!(q.prev_close, 308.260009765625);
+        assert_eq!((q.high, q.low, q.volume), (309.97, 302.79, 34_168_163.0));
+        assert_eq!(q.open, 307.75); // newest bar's open
+        // The change chip reads from these two, so pin the sign as well as the size.
+        assert!(q.change() < 0.0 && q.change_pct() < 0.0);
+    }
+
+    #[test]
+    fn chart_drops_null_bars_and_keeps_arrays_aligned() {
+        let q = parse_chart(GOLD_JSON, "GC=F").unwrap();
+        assert_eq!(q.name, "Gold Dec 26"); // no longName on this one — shortName carries it
+        // The middle bar is null on every array, so two rows survive, still aligned.
+        assert_eq!(q.closes, [4452.1, 4467.3]);
+        assert_eq!(q.volumes, [900.0, 1234.0]);
+        assert_eq!(q.dates, ["2026-08-07", "2026-08-11"]);
+        assert_eq!(q.prev_close, 4452.1);
+        assert_eq!(q.open, 4460.1); // the newest KEPT bar, not the null one
+    }
+
+    #[test]
+    fn unknown_symbol_is_an_error_not_an_empty_chart() {
+        let e = parse_chart(UNKNOWN_JSON, "NOPE").unwrap_err();
+        assert!(e.0.contains("NOPE"), "{}", e.0);
+        assert!(e.0.contains("delisted"), "{}", e.0);
+        // A body that is not JSON at all fails the same way rather than panicking.
+        assert!(parse_chart("<html>rate limited</html>", "NOPE").is_err());
+    }
+
+    #[test]
+    fn tickers_survive_the_url_and_legacy_lists_migrate() {
+        // `=` must not reach the query string unescaped.
+        assert_eq!(percent_encode("GC=F"), "GC%3DF");
+        assert_eq!(percent_encode("EURUSD=X"), "EURUSD%3DX");
+        assert_eq!(percent_encode("AAPL"), "AAPL");
+        // Watchlists saved under the previous provider's spelling.
+        assert_eq!(migrate_symbol("AAPL.US"), "AAPL");
+        assert_eq!(migrate_symbol("XAUUSD"), "GC=F");
+        assert_eq!(migrate_symbol("CL.F"), "CL=F");
+        assert_eq!(migrate_symbol("EURUSD"), "EURUSD=X");
+        // Already-Yahoo entries are left alone.
+        assert_eq!(migrate_symbol("GC=F"), "GC=F");
+        assert_eq!(migrate_symbol("MSFT"), "MSFT");
+    }
+
+    #[test]
+    fn iso_date_matches_known_stamps() {
+        assert_eq!(iso_date(0), "1970-01-01");
+        assert_eq!(iso_date(1_786_455_000), "2026-08-11"); // 13:30 UTC = 9:30 ET open
+        assert_eq!(iso_date(1_709_164_800), "2024-02-29"); // leap day
+    }
+
+    /// Every preset must be a symbol the live path can actually request.
+    #[test]
+    fn presets_are_named_and_encodable() {
+        for s in PRESETS {
+            assert_ne!(preset_name(s), s, "{s} has no display name");
+            assert!(!percent_encode(s).is_empty());
+        }
     }
 }
