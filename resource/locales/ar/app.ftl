@@ -82,3 +82,11 @@ add_symbol_body = أدخل رمز Yahoo — AAPL أو SPY أو GC=F.
 menu_add_symbol = إضافة رمز…
 menu_remove_symbol = حذف الرمز
 menu_symbols = الرموز
+
+# وسيط الشبكة لطلبات الأسعار
+settings_proxy_section = الشبكة
+settings_proxy_label = الوسيط
+settings_proxy_hint = تمر طلبات الأسعار عبره. استخدم ‎%u‎ في موضع إدراج رابط Yahoo كاملًا، أو ‎%p‎ لإدراج مساره وحده؛ والقالب الخالي منهما يُعامل كبادئة. اتركه فارغًا للجلب المباشر — نسخة الويب تحتاج وسيطًا لأن المتصفحات تحجب الطلبات عبر المواقع إلى Yahoo.
+settings_proxy_apply = تطبيق
+settings_proxy_relay = استخدام وسيط Daybrite
+settings_proxy_direct = جلب مباشر

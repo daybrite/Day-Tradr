@@ -77,8 +77,11 @@ pub fn manage_page() -> AnyPiece {
             // Open the symbol. Inside the Symbols tab this pushes onto that tab's own stack;
             // in the desktop sidebar it selects the row (the enclosing selector owns the route).
             .on_tap(move || {
-                let _ = navigate(&slot.key());
+                crate::open_symbol(&slot.key());
             })
+            // Reactively, like the Remove button above: a recycled cell rebinds to another
+            // symbol, and a build-time id would address the wrong row after a reorder.
+            .id_of(move || format!("sym-row-{}", slot.get()))
         },
     )
     .row_height(RowHeight::Uniform(52.0))

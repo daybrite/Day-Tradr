@@ -4,6 +4,7 @@
 //! watchlist overview, a canvas-drawn detail chart per instrument, and manage/settings pages.
 
 use day::prelude::*;
+use std::cell::OnceCell;
 
 mod charts;
 mod pages;
@@ -91,22 +92,26 @@ pub fn root() -> AnyPiece {
     shell.id("nav")
 }
 
-/// The phone shell: three tabs, Watchlist first. Symbols carries its own push stack, so a
-/// symbol opened from that tab returns to the LIST rather than to the watchlist — the standard
+/// The phone shell: three tabs, Watchlist first. EACH tab that can reach a symbol carries its own
+/// push stack, so a symbol opened from a tab returns to that tab's own root — the standard
 /// per-tab-stack behaviour on both platforms.
+///
+/// The tab keys deliberately match the desktop sidebar's item keys (`watchlist`, `manage`,
+/// `settings`), so a route naming a SECTION means the same thing at every size. A symbol does
+/// not: the sidebar owns symbol keys at the top level (`MSFT`), while here a symbol is pushed
+/// onto the owning tab's stack and its route nests under the tab (`watchlist/MSFT`). Use
+/// [`open_symbol`] rather than `navigate` to reach a symbol from a page that serves both.
 fn tabbed_shell() -> AnyPiece {
-    // Tabs always have a selection, so the signal is a plain key, not an Option.
-    let tab: Signal<String> = Signal::new("watchlist".into());
-    selector(tab)
+    selector(tab())
         .style(SelectorStyle::Tabs)
         .item_icon(
             "watchlist".to_string(),
             res::str::nav_watchlist(),
             res::vectors::tab_watchlist.clone(),
-            pages::watchlist_page,
+            watchlist_stack,
         )
         .item_icon(
-            "symbols".to_string(),
+            "manage".to_string(),
             res::str::nav_symbols(),
             res::vectors::tab_symbols.clone(),
             symbols_stack,
@@ -120,11 +125,68 @@ fn tabbed_shell() -> AnyPiece {
         .any()
 }
 
+thread_local! {
+    /// The phone shell's state, held outside the build so a page can reach it and so a rebuild
+    /// (a size-class morph) keeps the tab and both stacks where the user left them.
+    static TAB: OnceCell<Signal<String>> = const { OnceCell::new() };
+    static WATCHLIST_PATH: OnceCell<Signal<Vec<String>>> = const { OnceCell::new() };
+    static SYMBOLS_PATH: OnceCell<Signal<Vec<String>>> = const { OnceCell::new() };
+}
+
+/// Tabs always have a selection, so the signal is a plain key, not an `Option`.
+fn tab() -> Signal<String> {
+    TAB.with(|c| *c.get_or_init(|| Scope::detached().enter(|| Signal::new("watchlist".into()))))
+}
+
+fn watchlist_path() -> Signal<Vec<String>> {
+    WATCHLIST_PATH.with(|c| *c.get_or_init(|| Scope::detached().enter(|| Signal::new(Vec::new()))))
+}
+
+fn symbols_path() -> Signal<Vec<String>> {
+    SYMBOLS_PATH.with(|c| *c.get_or_init(|| Scope::detached().enter(|| Signal::new(Vec::new()))))
+}
+
+/// Open a symbol's detail page, whichever shell is live.
+///
+/// The sidebar shell owns symbol keys as top-level routes, so `navigate` claims them. A STACK
+/// does not: its `push` refuses every non-empty key by design, because a stack is driven by its
+/// path rather than by route strings (day-pieces/src/nav.rs). A row that only called `navigate`
+/// therefore did nothing at all on a phone — the tap registered and no page opened.
+pub fn open_symbol(symbol: &str) {
+    if navigate(symbol) {
+        return;
+    }
+    let path = if tab().get_untracked() == "manage" {
+        symbols_path()
+    } else {
+        watchlist_path()
+    };
+    // Guard the repeat: tapping the row of the symbol already on top would stack a duplicate
+    // page, and the back button would then land on the same detail again.
+    path.update(|p| {
+        if p.last().map(String::as_str) != Some(symbol) {
+            p.push(symbol.to_string());
+        }
+    });
+}
+
+/// The Watchlist tab: the watchlist as the stack's root, a row pushing that symbol's detail page.
+///
+/// The stack is what makes a row tappable on a phone at all. A watchlist row navigates by calling
+/// `navigate(symbol)` (pages/watchlist.rs), which needs a surface willing to accept the symbol as
+/// a route; with the page mounted bare in the tab there was none, so tapping a row did nothing.
+fn watchlist_stack() -> AnyPiece {
+    stack(watchlist_path(), pages::watchlist_page())
+        .title(res::str::nav_watchlist())
+        .destination(|key: &String| symbol_page(key))
+        .id("watchlist-stack")
+        .any()
+}
+
 /// The Symbols tab: the editable list as the stack's root, each row pushing that symbol's
 /// detail page, and a `+` in the navigation bar for adding one.
 fn symbols_stack() -> AnyPiece {
-    let path: Signal<Vec<String>> = Signal::new(Vec::new());
-    stack(path, pages::manage_page())
+    stack(symbols_path(), pages::manage_page())
         .title(res::str::nav_symbols())
         // The nav bar's trailing button (docs/navigation.md) — the phones have no window
         // toolbar to put this in.

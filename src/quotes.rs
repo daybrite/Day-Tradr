@@ -31,6 +31,27 @@ const PREF_SYMBOLS: &str = "tradr.symbols";
 const PREF_SORT: &str = "tradr.sort";
 const PREF_CHIP: &str = "tradr.chip";
 const PREF_OVERLAY: &str = "tradr.overlay";
+/// The HTTP proxy template quote fetches go through; empty means fetch Yahoo directly.
+const PREF_PROXY: &str = "tradr.proxy";
+
+/// What the web build uses unless the user says otherwise.
+///
+/// A browser will not let a page fetch `query1.finance.yahoo.com` — Yahoo sends no
+/// `Access-Control-Allow-Origin`, so every quote request fails CORS before it leaves the tab.
+/// A relaying proxy answers with `Access-Control-Allow-Origin: *` and fetches Yahoo server-side,
+/// where the rule does not apply. Native builds talk to Yahoo directly and default to empty:
+/// there is no CORS on a socket, and a proxy would only add a hop and a stranger.
+pub const DEFAULT_WEB_PROXY: &str = "https://api.allorigins.win/raw?url=%u";
+
+/// The Daybrite relay, for anyone who would rather not depend on a public one.
+///
+/// The public relays are open proxies serving whoever finds them, and they behave like it: a
+/// six-symbol load against `api.allorigins.win` completed one request the first time it was
+/// measured, which is why [`get_text_resilient`] gates and retries. `proxy.daybrite.dev` is a
+/// small Cloudflare Worker that reaches an allowlist of endpoints and nothing else — its source
+/// and setup steps live in `proxy/` alongside this app. It takes the target as a PATH under a
+/// logical site name rather than as an encoded parameter, which is what `%p` is for.
+pub const DAYBRITE_WEB_PROXY: &str = "https://proxy.daybrite.dev/sites/finance/%p";
 
 /// A fresh install tracks a spread of stocks, an ETF, and two commodities. (TSLA stays in
 /// [`PRESETS`], so it can still be added from the manage page.)
@@ -309,9 +330,77 @@ impl ChipMode {
 }
 
 thread_local! {
+    static PROXY: OnceCell<Signal<String>> = const { OnceCell::new() };
     static SORT: OnceCell<Signal<Sort>> = const { OnceCell::new() };
     static CHIP: OnceCell<Signal<ChipMode>> = const { OnceCell::new() };
     static OVERLAY: OnceCell<Signal<bool>> = const { OnceCell::new() };
+}
+
+/// The proxy template, persisted. Seeded from prefs; a fresh install gets
+/// [`DEFAULT_WEB_PROXY`] on the web build and nothing anywhere else. A SAVED empty string is
+/// honoured as "direct" — `is_some` distinguishes it from never having been set, so a web user
+/// who deliberately clears the field does not get the default handed back on next launch.
+pub fn proxy() -> Signal<String> {
+    PROXY.with(|cell| {
+        *cell.get_or_init(|| {
+            let seed = day_part_prefs::get(PREF_PROXY).unwrap_or_else(|| {
+                if cfg!(feature = "dom") {
+                    DEFAULT_WEB_PROXY.to_string()
+                } else {
+                    String::new()
+                }
+            });
+            Scope::detached().enter(|| Signal::new(seed))
+        })
+    })
+}
+
+pub fn set_proxy(template: &str) {
+    day_part_prefs::set(PREF_PROXY, template);
+    proxy().set(template.to_string());
+}
+
+/// Route `url` through the proxy `template`.
+///
+/// `%u` is replaced with the PERCENT-ENCODED url, because the templates that use a placeholder
+/// put it in a query parameter and the target carries its own query string: substituted raw,
+/// `…?url=https://…/chart/AAPL?range=2y&interval=1d` hands `interval` to the PROXY instead of to
+/// Yahoo, and the request 500s (measured against api.allorigins.win, which answers 200 with the
+/// encoded form and 500 with the raw one).
+///
+/// `%p` is replaced with the target's PATH AND QUERY, minus the leading slash. That is the shape
+/// an allowlisting relay uses, where the host is already decided by the template and only the
+/// path travels: `https://proxy.daybrite.dev/sites/finance/%p` becomes
+/// `https://proxy.daybrite.dev/sites/finance/v8/finance/chart/AAPL?range=2y&interval=1d`. Nothing
+/// is re-encoded here — the path is already escaped, and encoding it again would send the relay a
+/// literal `%3D` to look up.
+///
+/// A template with no placeholder is treated as a PREFIX and the raw url is appended — the shape
+/// the cors-anywhere family uses (`https://proxy.example/https://target`). An empty template
+/// fetches directly.
+pub fn proxied(template: &str, url: &str) -> String {
+    let template = template.trim();
+    if template.is_empty() {
+        url.to_string()
+    } else if template.contains("%p") {
+        template.replace("%p", path_and_query(url))
+    } else if template.contains("%u") {
+        template.replace("%u", &percent_encode(url))
+    } else {
+        format!("{template}{url}")
+    }
+}
+
+/// The path and query of an absolute url, without the leading slash, so a template can end in
+/// the `/` that separates it (`…/sites/finance/` + `v8/finance/chart/AAPL`).
+///
+/// A url with no path at all yields an empty string rather than borrowing past the end.
+fn path_and_query(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    match rest.find('/') {
+        Some(slash) => &rest[slash + 1..],
+        None => "",
+    }
 }
 
 pub fn sort() -> Signal<Sort> {
@@ -641,7 +730,9 @@ async fn fetch(symbol: String) -> Result<Quote, QuoteError> {
         "{CHART_URL}{}?range=2y&interval=1d",
         percent_encode(&symbol)
     );
-    let body = get_text(&url).await?;
+    let template = proxy().get_untracked();
+    let route = proxied(&template, &url);
+    let body = get_text_resilient(&route, route != url).await?;
     parse_chart(&body, &symbol)
 }
 
@@ -659,7 +750,108 @@ fn percent_encode(s: &str) -> String {
     out
 }
 
-async fn get_text(url: &str) -> Result<String, QuoteError> {
+/// How many quote fetches may be in flight at once while a proxy is in use.
+///
+/// MEASURED, not guessed: firing the six default symbols at `api.allorigins.win` together
+/// returned one body and five gateway timeouts (~19s each) — which is precisely the "could not
+/// load" wall a web user meets on first launch. Staggered, the same six mostly land. A public
+/// relay is a shared resource with its own rate limiting, so the app queues behind itself
+/// rather than stampeding it. Direct fetches talk to Yahoo and need no gate.
+const PROXY_MAX_IN_FLIGHT: usize = 2;
+
+thread_local! {
+    static IN_FLIGHT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Cooperative semaphore: yield to the main-loop executor until a slot frees up. Day's executor
+/// is single-threaded, so a plain counter is enough — there is no other thread to race.
+///
+/// Yields `None` if `epoch` went stale while waiting, having taken no slot.
+async fn gate_acquire(epoch: u64) -> Option<GateSlot> {
+    loop {
+        if superseded(epoch) {
+            return None;
+        }
+        let got = IN_FLIGHT.with(|c| {
+            if c.get() < PROXY_MAX_IN_FLIGHT {
+                c.set(c.get() + 1);
+                true
+            } else {
+                false
+            }
+        });
+        if got {
+            return Some(GateSlot);
+        }
+        day::sleep(150).await;
+    }
+}
+
+/// Has a reload been asked for since this request started?
+///
+/// Changing the proxy calls [`reload_all`], and without this check the requests aimed at the OLD
+/// proxy keep the two gate slots for as long as their retries run — up to a couple of minutes,
+/// during which the new setting looks like it did nothing. `Resource` already drops a superseded
+/// load, so abandoning one loses nothing.
+fn superseded(epoch: u64) -> bool {
+    generation().get_untracked() != epoch
+}
+
+/// A held slot, given back when it drops.
+///
+/// Drop rather than a release call at the end of the fetch: superseding a `Resource` load ABORTS
+/// it by dropping its future mid-await, so a release written as a statement never runs. Two
+/// leaked slots wedge the gate shut and the app stops fetching at all — which is what changing
+/// the proxy used to do, since that supersedes every load in flight (measured: zero requests
+/// afterwards, forever).
+struct GateSlot;
+
+impl Drop for GateSlot {
+    fn drop(&mut self) {
+        IN_FLIGHT.with(|c| c.set(c.get().saturating_sub(1)));
+    }
+}
+
+/// Fetch with the retry a public relay needs. Measured failure rate against allorigins was
+/// roughly one request in three (500s and 522 gateway timeouts) even sequentially, and a failed
+/// symbol shows as a dead row until the next manual refresh — so a couple of quiet retries buy
+/// far more than they cost. Only used when a proxy is configured; a direct Yahoo fetch is
+/// reliable enough not to need it.
+async fn get_text_resilient(url: &str, proxied: bool) -> Result<String, QuoteError> {
+    if !proxied {
+        return get_text(url, 15).await;
+    }
+    let epoch = generation().get_untracked();
+    let Some(_slot) = gate_acquire(epoch).await else {
+        return Err(QuoteError("superseded".to_string()));
+    };
+    // A relay adds a hop, and a slow-but-successful response took 20s in testing — a 15s
+    // timeout would have thrown away a body that was on its way.
+    // FIVE attempts, not two or three. Measured success against allorigins is roughly one in
+    // two per try — independent of payload size (a 1y request fares no better than 2y) — so a
+    // symbol needs several goes before its row stops reading "could not load". They cost
+    // nothing while they wait: each symbol retries on its own, and rows fill in as they land.
+    let mut last = QuoteError("request failed".to_string());
+    for attempt in 0..5u32 {
+        match get_text(url, 25).await {
+            Ok(body) => return Ok(body),
+            Err(e) => {
+                last = e;
+                // Give up the slot the moment the answer stopped mattering, so the reload that
+                // superseded us is not queued behind our remaining retries.
+                if superseded(epoch) {
+                    return Err(QuoteError("superseded".to_string()));
+                }
+                if attempt < 4 {
+                    day::sleep(600 * (attempt + 1)).await;
+                }
+            }
+        }
+    }
+    Err(last)
+}
+
+async fn get_text(url: &str, timeout_secs: u64) -> Result<String, QuoteError> {
     let resp = day_part_http::fetch_future(
         day_part_http::Request::get(url)
             // Yahoo answers `429 Too Many Requests` to a request with no User-Agent, on the
@@ -672,7 +864,7 @@ async fn get_text(url: &str) -> Result<String, QuoteError> {
                     " (+https://daybrite.dev)"
                 ),
             )
-            .timeout(std::time::Duration::from_secs(15)),
+            .timeout(std::time::Duration::from_secs(timeout_secs)),
     )
     .await
     .map_err(|e| QuoteError(format!("request failed: {e}")))?;
@@ -880,6 +1072,69 @@ mod tests {
         // Already-Yahoo entries are left alone.
         assert_eq!(migrate_symbol("GC=F"), "GC=F");
         assert_eq!(migrate_symbol("MSFT"), "MSFT");
+    }
+
+    #[test]
+    fn proxy_templates_route_the_url() {
+        let url = "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=2y&interval=1d";
+        // Empty: straight to Yahoo.
+        assert_eq!(proxied("", url), url);
+        assert_eq!(proxied("   ", url), url);
+        // Placeholder: ENCODED, so the target's own `&interval=` stays part of the target
+        // rather than becoming a parameter of the proxy (measured: raw substitution 500s).
+        // Spelled out rather than read from DEFAULT_WEB_PROXY: this pins the ENCODING RULE, and
+        // it must keep passing when the shipped default moves to a relay that takes a path.
+        const ENCODED: &str = "https://api.allorigins.win/raw?url=%u";
+        let via = proxied(ENCODED, url);
+        assert!(
+            via.starts_with("https://api.allorigins.win/raw?url=https%3A%2F%2F"),
+            "{via}"
+        );
+        assert!(via.contains("%3Frange%3D2y%26interval%3D1d"), "{via}");
+        assert_eq!(
+            via.matches('?').count(),
+            1,
+            "only the proxy's own query survives: {via}"
+        );
+        // No placeholder: prefix form, target appended verbatim (the cors-anywhere shape).
+        assert_eq!(
+            proxied("https://proxy.example/", url),
+            format!("https://proxy.example/{url}")
+        );
+        // A ticker with `=` still round-trips through both forms.
+        let fut = "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?range=2y&interval=1d";
+        assert!(
+            proxied(ENCODED, fut).contains("GC%253DF"),
+            "double-encoded once"
+        );
+        // Whatever the shipped default is, it must be a template that routes somewhere other
+        // than Yahoo — an empty one would send the web build straight into a CORS wall.
+        assert!(!DEFAULT_WEB_PROXY.trim().is_empty());
+        assert!(!proxied(DEFAULT_WEB_PROXY, url).contains("query1.finance.yahoo.com/v8"));
+    }
+
+    /// The path form, which is what an allowlisting relay like `proxy.daybrite.dev` expects.
+    /// These are the exact urls the Worker was verified against.
+    #[test]
+    fn path_templates_carry_the_path_verbatim() {
+        let url = "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=2y&interval=1d";
+        assert_eq!(
+            proxied(DAYBRITE_WEB_PROXY, url),
+            "https://proxy.daybrite.dev/sites/finance/v8/finance/chart/AAPL?range=2y&interval=1d"
+        );
+        // The ticker's escape is passed through as-is; re-encoding it would ask the relay for a
+        // symbol spelled `GC%3DF`.
+        let fut = "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?range=2y&interval=1d";
+        assert_eq!(
+            proxied(DAYBRITE_WEB_PROXY, fut),
+            "https://proxy.daybrite.dev/sites/finance/v8/finance/chart/GC%3DF?range=2y&interval=1d"
+        );
+        // The template decides the host, so the target's own host never appears in the result.
+        assert!(!proxied(DAYBRITE_WEB_PROXY, url).contains("yahoo.com"));
+        // Degenerate inputs stay in bounds rather than panicking on a slice.
+        assert_eq!(path_and_query("https://example.com"), "");
+        assert_eq!(path_and_query("https://example.com/"), "");
+        assert_eq!(path_and_query("v8/chart?x=1"), "chart?x=1");
     }
 
     #[test]

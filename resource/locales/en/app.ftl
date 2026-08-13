@@ -84,3 +84,11 @@ add_symbol_body = Enter a Yahoo ticker — AAPL, SPY, GC=F.
 menu_add_symbol = Add Symbol…
 menu_remove_symbol = Remove Symbol
 menu_symbols = Symbols
+
+# Network proxy for quote fetches (docs: quotes.rs `proxied`)
+settings_proxy_section = Network
+settings_proxy_label = Proxy
+settings_proxy_hint = Quote requests go through this. Use %u where the whole Yahoo URL should be inserted, or %p where only its path should go; a template with neither is treated as a prefix. Leave empty to fetch directly — the web build needs a proxy because browsers block cross-site requests to Yahoo.
+settings_proxy_apply = Apply
+settings_proxy_relay = Use Daybrite relay
+settings_proxy_direct = Fetch directly

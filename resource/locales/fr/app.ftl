@@ -82,3 +82,11 @@ add_symbol_body = Saisissez un symbole Yahoo — AAPL, SPY, GC=F.
 menu_add_symbol = Ajouter un symbole…
 menu_remove_symbol = Supprimer le symbole
 menu_symbols = Symboles
+
+# Proxy réseau pour les requêtes de cours
+settings_proxy_section = Réseau
+settings_proxy_label = Proxy
+settings_proxy_hint = Les requêtes de cours passent par là. Utilisez %u à l'endroit où insérer l'URL Yahoo complète, ou %p pour n'insérer que son chemin ; un modèle sans l'un ni l'autre est traité comme un préfixe. Laissez vide pour interroger directement — la version web a besoin d'un proxy, les navigateurs bloquant les requêtes intersites vers Yahoo.
+settings_proxy_apply = Appliquer
+settings_proxy_relay = Utiliser le relais Daybrite
+settings_proxy_direct = Interroger directement

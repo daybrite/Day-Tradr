@@ -55,6 +55,48 @@ pub fn settings_page() -> AnyPiece {
                 .title(res::str::settings_theme_section()),
         ));
     }
+    // The proxy every quote fetch is routed through. Edited as a template rather than a
+    // host, because the two proxy families take the target differently: a placeholder in a
+    // query parameter, or a prefix the target is appended to (quotes::proxied).
+    let proxy = quotes::proxy();
+    let entry = Signal::new(proxy.get_untracked());
+    parts.push(AnyPiece::new(
+        section((
+            labeled(
+                res::str::settings_proxy_label(),
+                text_field(entry)
+                    .placeholder(quotes::DEFAULT_WEB_PROXY.to_string())
+                    .id("proxy-field"),
+            ),
+            label(res::str::settings_proxy_hint()).font(Font::Footnote),
+            row((
+                button(res::str::settings_proxy_apply())
+                    .action(move || {
+                        quotes::set_proxy(&entry.get_untracked());
+                        // Re-fetch every symbol through the new route, so the field's effect is
+                        // visible immediately rather than at the next refresh.
+                        quotes::reload_all();
+                    })
+                    .prominent()
+                    .id("proxy-apply"),
+                // Fills the field rather than applying, so the template is visible and editable
+                // before it takes effect — the relay's url is long enough that nobody should
+                // have to type it on a phone.
+                button(res::str::settings_proxy_relay())
+                    .action(move || entry.set(quotes::DAYBRITE_WEB_PROXY.to_string()))
+                    .id("proxy-relay"),
+                button(res::str::settings_proxy_direct())
+                    .action(move || {
+                        entry.set(String::new());
+                        quotes::set_proxy("");
+                        quotes::reload_all();
+                    })
+                    .id("proxy-direct"),
+            ))
+            .spacing(8.0),
+        ))
+        .title(res::str::settings_proxy_section()),
+    ));
     parts.push(AnyPiece::new(
         section((
             label(res::str::settings_refresh_hint()).font(Font::Footnote),

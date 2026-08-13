@@ -82,3 +82,11 @@ add_symbol_body = 请输入 Yahoo 代码 — AAPL、SPY、GC=F。
 menu_add_symbol = 添加代码…
 menu_remove_symbol = 删除代码
 menu_symbols = 代码
+
+# 行情请求的网络代理
+settings_proxy_section = 网络
+settings_proxy_label = 代理
+settings_proxy_hint = 行情请求经由此处发出。用 %u 标记插入完整 Yahoo 链接的位置，或用 %p 只插入其路径；两者都不含的模板将作为前缀使用。留空则直接请求——网页版需要代理，因为浏览器会拦截对 Yahoo 的跨站请求。
+settings_proxy_apply = 应用
+settings_proxy_relay = 使用 Daybrite 中继
+settings_proxy_direct = 直接请求

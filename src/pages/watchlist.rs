@@ -200,7 +200,7 @@ fn row_card(symbol: String) -> AnyPiece {
     .background(Color::rgba(0.5, 0.5, 0.5, 0.10))
     .corner_radius(12.0)
     .on_tap(move || {
-        let _ = navigate(&nav_to);
+        crate::open_symbol(&nav_to);
     })
     .id(format!("wl-row-{symbol}"))
 }
