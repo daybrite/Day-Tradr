@@ -1,0 +1,18 @@
+# Day Tradr website (https://daybrite.github.io/Day-Tradr/) — built by the shared
+# build-day-app workflow from the daybrite/daysite template. Everything content-ful
+# (name, description, screenshots, downloads) comes from Day.toml, store/, and the
+# release pipeline; this file holds only what is genuinely site-specific.
+
+host = "https://daybrite.github.io/Day-Tradr"
+locales = ["en", "fr", "ar", "zh-CN"]
+
+# The green the app's icon and its rising-price charts share. Deep enough to read as link
+# text on white (3.4:1, the same legibility as Day Skies' blue) rather than the vivid
+# #34C759 the charts draw with, which is a fill color, not a text one.
+accent-color = "#10A05A"
+
+# The hosted web build lives at /Day-Tradr/webapp/ (the hero's "Open the web app" button).
+webapp = "webapp"
+
+# Web-first: the live build is one click away, so preselect it in the platform picker.
+default-platform = "web"

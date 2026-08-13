@@ -1,1 +1,1 @@
-Première version publique. Cartes de suivi avec sparklines, écran de détail avec graphiques de prix et de volume, grille de statistiques complète, gestion des symboles, et quatre langues.
+Première version publique. Une liste de suivi avec résumé des mouvements du jour, cartes triables à sparklines, un écran de détail avec moyennes mobiles superposées, volume et barres d'amplitude, gestion des symboles par glisser-déposer et balayage, et quatre langues.

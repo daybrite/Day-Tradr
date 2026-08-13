@@ -1,1 +1,1 @@
-First public release. Watchlist cards with sparklines, a detail screen with price and volume charts, a full statistics grid, symbol management, and four languages.
+First public release. A watchlist with a daily movers summary, sortable cards with sparklines, a detail screen with moving-average overlays, volume and range bars, drag-to-reorder and swipe-to-delete symbol management, and four languages.

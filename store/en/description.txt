@@ -1,12 +1,15 @@
 Day Tradr is a watchlist for the symbols you actually follow, with the numbers laid out so you can read them at a glance.
 
-Every symbol gets a card: its name, a sparkline of recent movement, the price, and a change chip you can read from across the room. Tap one for the full picture — a price chart with a volume strip, and the statistics that matter: open, high, low, volume, 52-week high and low, previous close, a 20-day moving average, and the number of sessions behind it.
+The list opens on a summary of the day: how many of your symbols are up, how many are down, and the best and worst movers by name. Every symbol below gets a card — its name, a sparkline of recent movement, the price, and a change chip you can read from across the room. Sort by your own order, by name, or by today's move, and switch every chip between the change, the percentage, or both.
+
+Tap a symbol for the full picture: a price chart with 20- and 50-day moving averages you can turn off, a volume strip beneath it, and range bars showing where the price sits inside today's high and low and inside the year's. Five ranges, from a month to everything the source has.
 
 WHAT YOU GET
 
-• Stocks, commodities and currency pairs, added by ticker or picked from suggestions
-• Sparklines on the list, full charts on the detail screen
-• A statistics grid that does not make you scroll to find the number you wanted
+• Stocks, ETFs, commodity futures and currency pairs, added by ticker or picked from suggestions
+• A summary of the day's movers above the list, not buried inside it
+• Moving-average overlays and range bars on the detail chart
+• A watchlist you can reorder by dragging, and edit by swiping a row away
 • English, French, Arabic and Simplified Chinese, with right-to-left layout in Arabic
 • Light and dark, following your system or set by hand
 

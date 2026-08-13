@@ -1,1 +1,1 @@
-stocks,watchlist,markets,quotes,ticker,chart,finance,commodities,forex
+stocks,watchlist,markets,quotes,ticker,chart,finance,commodities,forex,etf

@@ -1,0 +1,17 @@
+/* Day Tradr site overrides — inlined after the template's styles, so anything here wins.
+   Kept to a whisper on purpose: the template carries the design; this file exists to hold the
+   few things that are Day Tradr's own. */
+
+/* The title in the app icon's greens: mint lifting out of the deep green the mark sits on. */
+.rise h1 {
+  background: linear-gradient(105deg, #7be3b0, #10a05a 55%, #12352e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Tabular figures wherever the site shows a number beside a screenshot caption or a version:
+   this is an app about columns of prices, and proportional digits jitter as they change. */
+.rise :is(code, .tabular) {
+  font-variant-numeric: tabular-nums;
+}

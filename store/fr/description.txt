@@ -1,19 +1,22 @@
-Day Tradr est une liste de suivi pour les symboles que vous suivez vraiment, avec des chiffres disposés pour être lus d'un coup d'œil.
+Day Tradr est une liste de suivi pour les symboles que vous suivez vraiment, avec les chiffres disposés pour être lus d'un coup d'œil.
 
-Chaque symbole a sa carte : son nom, une sparkline de ses mouvements récents, le prix et une pastille de variation lisible à l'autre bout de la pièce. Touchez-en une pour tout voir — un graphique de prix avec une bande de volume, et les statistiques qui comptent : ouverture, haut, bas, volume, haut et bas sur 52 semaines, clôture précédente, moyenne mobile sur 20 jours, et le nombre de séances derrière ces chiffres.
+La liste s'ouvre sur le résumé de la séance : combien de vos symboles montent, combien baissent, et les plus fortes hausses et baisses, nommées. Chaque symbole a ensuite sa carte — son nom, une sparkline des mouvements récents, le cours, et une pastille de variation lisible à distance. Triez selon votre propre ordre, par nom ou par variation du jour, et basculez toutes les pastilles entre la variation, le pourcentage ou les deux.
+
+Touchez un symbole pour le tableau complet : un graphique des cours avec les moyennes mobiles à 20 et 50 jours (désactivables), une bande de volume en dessous, et des barres d'amplitude montrant où se situe le cours dans les extrêmes du jour et dans ceux de l'année. Cinq plages, du mois à tout l'historique disponible.
 
 CE QUE VOUS OBTENEZ
 
-• Actions, matières premières et paires de devises, ajoutées par symbole ou choisies parmi les suggestions
-• Des sparklines dans la liste, des graphiques complets sur l'écran de détail
-• Une grille de statistiques qui ne vous oblige pas à faire défiler pour trouver le chiffre voulu
+• Actions, ETF, contrats à terme sur matières premières et paires de devises, ajoutés par symbole ou choisis parmi des suggestions
+• Un résumé des mouvements du jour au-dessus de la liste, pas enfoui dedans
+• Moyennes mobiles superposées et barres d'amplitude sur le graphique détaillé
+• Une liste que vous réordonnez en glissant, et modifiez en balayant une ligne
 • Anglais, français, arabe et chinois simplifié, avec mise en page de droite à gauche en arabe
-• Clair et sombre, selon votre système ou réglé à la main
+• Clair et sombre, selon le système ou réglé à la main
 
 COURS DE CLÔTURE
 
 Les données viennent des cours de clôture gratuits de Yahoo Finance. Ce n'est pas un flux en temps réel et Day Tradr n'est pas une application de trading : il n'y a pas de compte, pas de connexion à un courtier, et rien à acheter ni à vendre ici.
 
-Open source, construit avec le framework Day — une seule base de code Rust qui se dessine avec les vrais widgets natifs de chaque plateforme. github.com/daybrite/Day-Tradr
+Open source, construit avec le framework Day — une seule base de code Rust qui se dessine avec les vrais composants natifs de chaque plateforme. github.com/daybrite/Day-Tradr
 
 Données par Yahoo Finance.
