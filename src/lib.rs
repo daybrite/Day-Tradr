@@ -52,6 +52,10 @@ pub fn root() -> AnyPiece {
     // persisted language/theme overrides before the first page builds.
     res::locales::install();
     pages::apply_startup();
+    // The desktop's Add/Remove Symbol items (docs/menus.md). Installed on every target: the
+    // toolkits with no menu bar simply have nowhere to draw it, and the phones reach the same
+    // add flow through the Symbols tab's `+` button instead.
+    pages::install_app_menu();
     // The Preferences window (docs/windows.md): the settings page as a singleton window on
     // desktop (auto Settings…/⌘, item), the cover fallback on mobile; the sidebar item
     // keeps working everywhere.
@@ -71,6 +75,72 @@ pub fn root() -> AnyPiece {
         let _ = quotes::resource_for(&s);
     }
 
+    // Two shells over the same pages (docs/size-classes.md). A phone gets the platform's own
+    // top-level idiom — a tab bar — where a sidebar would spend a third of the screen on
+    // navigation chrome; anything wider keeps the sidebar, which is what a desktop stocks app
+    // looks like. `size_class()` is tracked, so a window dragged across the breakpoint rebuilds
+    // into the other shell rather than keeping the one it launched with.
+    // The nav id is applied HERE, to whichever shell was chosen — it is what every dayscript
+    // waits on, and one call site keeps it honest: tagging both shells would read as a
+    // duplicate to `day lint`, which cannot know the two are mutually exclusive.
+    let shell = if day::size_class().is_some_and(|c| !c.prefers_split()) {
+        tabbed_shell()
+    } else {
+        sidebar_shell()
+    };
+    shell.id("nav")
+}
+
+/// The phone shell: three tabs, Watchlist first. Symbols carries its own push stack, so a
+/// symbol opened from that tab returns to the LIST rather than to the watchlist — the standard
+/// per-tab-stack behaviour on both platforms.
+fn tabbed_shell() -> AnyPiece {
+    // Tabs always have a selection, so the signal is a plain key, not an Option.
+    let tab: Signal<String> = Signal::new("watchlist".into());
+    selector(tab)
+        .style(SelectorStyle::Tabs)
+        .item_icon(
+            "watchlist".to_string(),
+            res::str::nav_watchlist(),
+            res::vectors::tab_watchlist.clone(),
+            pages::watchlist_page,
+        )
+        .item_icon(
+            "symbols".to_string(),
+            res::str::nav_symbols(),
+            res::vectors::tab_symbols.clone(),
+            symbols_stack,
+        )
+        .item_icon(
+            "settings".to_string(),
+            res::str::nav_settings(),
+            res::vectors::tab_settings.clone(),
+            pages::settings_page,
+        )
+        .any()
+}
+
+/// The Symbols tab: the editable list as the stack's root, each row pushing that symbol's
+/// detail page, and a `+` in the navigation bar for adding one.
+fn symbols_stack() -> AnyPiece {
+    let path: Signal<Vec<String>> = Signal::new(Vec::new());
+    stack(path, pages::manage_page())
+        .title(res::str::nav_symbols())
+        // The nav bar's trailing button (docs/navigation.md) — the phones have no window
+        // toolbar to put this in.
+        .bar_action(
+            res::vectors::add_symbol.clone(),
+            res::str::menu_add_symbol(),
+            pages::prompt_for_symbol,
+        )
+        .destination(|key: &String| symbol_page(key))
+        .id("symbols-stack")
+        .any()
+}
+
+/// The desktop shell: the sidebar this app has always had, with one row per tracked symbol.
+fn sidebar_shell() -> AnyPiece {
+    let list = quotes::symbols();
     let section: Signal<Option<String>> = Signal::new(Some("watchlist".into()));
     selector(section)
         .style(SelectorStyle::Sidebar)
@@ -90,7 +160,7 @@ pub fn root() -> AnyPiece {
         })
         .item(
             "manage".to_string(),
-            res::str::nav_manage(),
+            res::str::nav_symbols(),
             pages::manage_page,
         )
         .item(
@@ -98,7 +168,6 @@ pub fn root() -> AnyPiece {
             res::str::nav_settings(),
             pages::settings_page,
         )
-        .id("nav")
         .any()
 }
 

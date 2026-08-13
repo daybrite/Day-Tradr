@@ -74,11 +74,26 @@ pub fn manage_page() -> AnyPiece {
             ))
             .spacing(8.0)
             .padding(Insets::symmetric(4.0, 0.0))
+            // Open the symbol. Inside the Symbols tab this pushes onto that tab's own stack;
+            // in the desktop sidebar it selects the row (the enclosing selector owns the route).
+            .on_tap(move || {
+                let _ = navigate(&slot.key());
+            })
         },
     )
     .row_height(RowHeight::Uniform(52.0))
     .reorderable(true)
     .on_reorder(quotes::move_symbol)
+    // Swipe a row away where the platform has the gesture (docs/list.md); the desktops answer
+    // `Cap::ListDelete = Unsupported` and keep using the row's own Remove button.
+    .deletable(true)
+    .delete_label(res::str::manage_remove().format())
+    .on_delete(|index| {
+        let list = quotes::symbols().get_untracked();
+        if let Some(sym) = list.get(index) {
+            quotes::remove(sym);
+        }
+    })
     .id("sym-rows")
     .height(312.0);
 
@@ -131,4 +146,53 @@ pub fn manage_page() -> AnyPiece {
     )
     .grow()
     .any()
+}
+
+/// Ask for a ticker and add it — the `+` in the Symbols tab's navigation bar, and the
+/// desktop's Add Symbol… menu item, share this one flow (docs/dialogs.md).
+pub fn prompt_for_symbol() {
+    day::task(async move {
+        let entered = prompt(res::str::add_symbol_title())
+            .message(res::str::add_symbol_body())
+            // OK/Cancel come from Day's core catalog, already localized for every locale the
+            // app ships (docs/dialogs.md) — no app strings needed for them.
+            .placeholder("AAPL".to_string())
+            .await;
+        if let Some(text) = entered {
+            let symbol = quotes::normalize(&text);
+            if !symbol.is_empty() {
+                quotes::add(&symbol);
+            }
+        }
+    });
+}
+
+/// The desktop's Symbols menu (docs/menus.md): the toolkits with a real menu bar get Add and
+/// Remove there, because they have no swipe gesture and a `+` bar button belongs to a phone's
+/// navigation bar, not a desktop window's chrome.
+///
+/// `app_menu_reactive`, not `app_menu`: the labels are `res::str` reads, so a runtime language
+/// switch re-lowers the menu in the new language.
+pub fn install_app_menu() {
+    app_menu_reactive(|| {
+        let symbols = res::str::menu_symbols().format();
+        let add = res::str::menu_add_symbol().format();
+        let remove = res::str::menu_remove_symbol().format();
+        vec![sub_menu(
+            symbols,
+            vec![
+                menu_item(add).key("n").action(prompt_for_symbol),
+                menu_item(remove).action(|| {
+                    // The selected symbol IS the current route on the sidebar shell; a route
+                    // that is not a tracked symbol (the watchlist, settings) removes nothing.
+                    if let Some(route) = current_route() {
+                        let list = quotes::symbols().get_untracked();
+                        if list.contains(&route) {
+                            quotes::remove(&route);
+                        }
+                    }
+                }),
+            ],
+        )]
+    });
 }

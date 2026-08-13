@@ -262,35 +262,31 @@ pub fn watchlist_page() -> AnyPiece {
                 },
             ),
             when(move || !list.get().is_empty(), move || breadth_strip(list)),
-            // List-wide controls, laid out for the width available. Side by side needs room for
-            // a three-segment picker AND the chip button; at compact width that overflows —
+            // List-wide controls, laid out for the width available. Side by side needs room
+            // for a three-segment picker AND the chip button; at compact width that overflows —
             // on a 392dp phone the localized segments alone eat the row and the button lands
-            // off-screen — so there they stack instead.
-            when(move || !list.get().is_empty() && !compact_width(), {
-                let names = sort_names.clone();
-                move || {
-                    row((
-                        picker(names.clone(), sort_ix).segmented().id("sort-picker"),
-                        spacer(),
-                        chip_mode_button(),
-                    ))
-                    .spacing(10.0)
-                    .align(VAlign::Center)
-                    .grow_w()
-                }
-            }),
+            // off-screen — so there they stack instead. Built ONCE and placed either way, so
+            // each id has a single call site.
             when(
-                move || !list.get().is_empty() && compact_width(),
+                move || !list.get().is_empty(),
                 move || {
-                    column((
-                        picker(sort_names.clone(), sort_ix)
-                            .segmented()
-                            .id("sort-picker"),
-                        chip_mode_button(),
-                    ))
-                    .spacing(8.0)
-                    .align(HAlign::Leading)
-                    .grow_w()
+                    let sorter = picker(sort_names.clone(), sort_ix)
+                        .segmented()
+                        .id("sort-picker");
+                    let mode = chip_mode_button();
+                    if compact_width() {
+                        column((sorter, mode))
+                            .spacing(8.0)
+                            .align(HAlign::Leading)
+                            .grow_w()
+                            .any()
+                    } else {
+                        row((sorter, spacer(), mode))
+                            .spacing(10.0)
+                            .align(VAlign::Center)
+                            .grow_w()
+                            .any()
+                    }
                 },
             ),
             each(

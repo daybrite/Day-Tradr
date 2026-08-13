@@ -7,7 +7,6 @@ app_title = Day Tradr
 app_tagline = Markets
 
 nav_watchlist = Watchlist
-nav_manage = Symbols
 nav_settings = Settings
 
 watchlist_title = Watchlist
@@ -77,3 +76,11 @@ range_52w = 52-week range
 chip_both = Change + %
 chip_percent = Percent
 chip_absolute = Change
+
+# Tabbed mobile shell + the add flow reached from the nav bar's + button
+nav_symbols = Symbols
+add_symbol_title = Add a symbol
+add_symbol_body = Enter a Yahoo ticker — AAPL, SPY, GC=F.
+menu_add_symbol = Add Symbol…
+menu_remove_symbol = Remove Symbol
+menu_symbols = Symbols

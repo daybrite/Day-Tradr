@@ -5,7 +5,6 @@ app_title = Day Tradr
 app_tagline = 行情
 
 nav_watchlist = 自选
-nav_manage = 代码
 nav_settings = 设置
 
 watchlist_title = 自选列表
@@ -75,3 +74,11 @@ range_52w = 52 周区间
 chip_both = 涨跌额 + %
 chip_percent = 百分比
 chip_absolute = 涨跌额
+
+# 移动端标签页外壳，以及导航栏 + 按钮的添加流程
+nav_symbols = 代码
+add_symbol_title = 添加代码
+add_symbol_body = 请输入 Yahoo 代码 — AAPL、SPY、GC=F。
+menu_add_symbol = 添加代码…
+menu_remove_symbol = 删除代码
+menu_symbols = 代码

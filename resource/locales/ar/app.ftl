@@ -5,7 +5,6 @@ app_title = Day Tradr
 app_tagline = الأسواق
 
 nav_watchlist = المتابعة
-nav_manage = الرموز
 nav_settings = الإعدادات
 
 watchlist_title = قائمة المتابعة
@@ -75,3 +74,11 @@ range_52w = نطاق ٥٢ أسبوعًا
 chip_both = التغير + ٪
 chip_percent = نسبة مئوية
 chip_absolute = التغير
+
+# واجهة الجوال بعلامات تبويب والإضافة من زر + في الشريط
+nav_symbols = الرموز
+add_symbol_title = إضافة رمز
+add_symbol_body = أدخل رمز Yahoo — AAPL أو SPY أو GC=F.
+menu_add_symbol = إضافة رمز…
+menu_remove_symbol = حذف الرمز
+menu_symbols = الرموز

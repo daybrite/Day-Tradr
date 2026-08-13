@@ -5,7 +5,6 @@ app_title = Day Tradr
 app_tagline = Marchés
 
 nav_watchlist = Suivi
-nav_manage = Symboles
 nav_settings = Réglages
 
 watchlist_title = Liste de suivi
@@ -75,3 +74,11 @@ range_52w = Amplitude 52 semaines
 chip_both = Variation + %
 chip_percent = Pourcentage
 chip_absolute = Variation
+
+# Coque mobile à onglets et ajout depuis le bouton + de la barre
+nav_symbols = Symboles
+add_symbol_title = Ajouter un symbole
+add_symbol_body = Saisissez un symbole Yahoo — AAPL, SPY, GC=F.
+menu_add_symbol = Ajouter un symbole…
+menu_remove_symbol = Supprimer le symbole
+menu_symbols = Symboles
