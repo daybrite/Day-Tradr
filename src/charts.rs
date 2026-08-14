@@ -91,10 +91,47 @@ fn project(closes: &[f64], min: f64, max: f64, rect: Rect) -> Vec<Point> {
         .collect()
 }
 
-fn polyline(d: &mut day::prelude::Draw, pts: &[Point], color: Color, width: f64) {
-    for pair in pts.windows(2) {
-        d.stroke(Shape::Line(pair[0], pair[1]), color, width);
+/// Stroke a series as ONE path.
+///
+/// Was one `Shape::Line` per segment, which is 250 ops for a year of daily closes and leaves
+/// every corner unjoined. A single path with round caps and joins is one op and renders the
+/// turns properly.
+///
+/// `smooth` fits a Catmull-Rom spline through the points instead of connecting them straight.
+/// Reserved for the SPARKLINE: a spline implies values between the samples, which is decorative
+/// at thumbnail size and misleading on a chart someone reads prices off.
+fn polyline(d: &mut day::prelude::Draw, pts: &[Point], color: Color, width: f64, smooth: bool) {
+    if pts.len() < 2 {
+        return;
     }
+    let mut b = PathBuilder::new();
+    if smooth {
+        b = b.smooth_polyline(pts, 0.65);
+    } else {
+        b = b.move_to(pts[0]);
+        for p in &pts[1..] {
+            b = b.line_to(*p);
+        }
+    }
+    d.stroke_styled(b.build(), color, StrokeStyle::round(width));
+}
+
+/// The area under a series, closed down to the baseline, as a path rather than a polygon so its
+/// top edge can follow the same spline the line does.
+fn area_path(pts: &[Point], baseline_y: f64, smooth: bool) -> Shape {
+    let mut b = PathBuilder::new();
+    if smooth {
+        b = b.smooth_polyline(pts, 0.65);
+    } else {
+        b = b.move_to(pts[0]);
+        for p in &pts[1..] {
+            b = b.line_to(*p);
+        }
+    }
+    b.line_to(Point::new(pts[pts.len() - 1].x, baseline_y))
+        .line_to(Point::new(pts[0].x, baseline_y))
+        .close()
+        .build()
 }
 
 /// The big price chart: gridlines with right-edge price labels, a gradient area fill under
@@ -152,36 +189,27 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
         let up = *closes.last().unwrap_or(&first) >= first;
         let line = trend_color(up);
 
-        // Gradient area under the line: the polyline closed down to the baseline.
-        let mut area = pts.clone();
-        area.push(Point::new(
-            inset.origin.x + inset.size.width,
-            inset.origin.y + inset.size.height,
-        ));
-        area.push(Point::new(
-            inset.origin.x,
-            inset.origin.y + inset.size.height,
-        ));
+        // Gradient area under the line, clipped to the plot rect so a fat stroke or a rounded
+        // join can never bleed over the gridline labels.
+        d.save();
+        d.clip(Shape::Rect(inset));
         d.fill(
-            Shape::Polygon(area),
+            area_path(&pts, inset.origin.y + inset.size.height, false),
             LinearGradient::vertical(faded(line, 0.30), faded(line, 0.02)),
         );
+        d.restore();
 
-        // Dashed reference at the window's first close.
+        // Dashed reference at the window's first close — one stroke with a dash pattern, where
+        // this used to emit a separate segment per dash.
         let ref_y = inset.origin.y + (1.0 - (first - min) / (max - min)) * inset.size.height;
-        let dash = 5.0;
-        let mut x = inset.origin.x;
-        while x < inset.origin.x + inset.size.width {
-            d.stroke(
-                Shape::Line(
-                    Point::new(x, ref_y),
-                    Point::new((x + dash).min(inset.origin.x + inset.size.width), ref_y),
-                ),
-                Color::rgba(0.5, 0.5, 0.5, 0.55),
-                1.0,
-            );
-            x += dash * 2.0;
-        }
+        d.stroke_styled(
+            Shape::Line(
+                Point::new(inset.origin.x, ref_y),
+                Point::new(inset.origin.x + inset.size.width, ref_y),
+            ),
+            Color::rgba(0.5, 0.5, 0.5, 0.55),
+            StrokeStyle::dashed(1.0, vec![5.0, 5.0]),
+        );
 
         // Moving-average overlays UNDER the price line, so the price always reads on top.
         // Each is drawn only where it exists (an SMA has no value until it has N samples), and
@@ -210,16 +238,16 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
                         // Off-scale or not yet defined: break the run so the line does not
                         // leap across the gap.
                         _ => {
-                            polyline(d, &run, color, 1.25);
+                            polyline(d, &run, color, 1.25, false);
                             run.clear();
                         }
                     }
                 }
-                polyline(d, &run, color, 1.25);
+                polyline(d, &run, color, 1.25, false);
             }
         }
 
-        polyline(d, &pts, line, 2.0);
+        polyline(d, &pts, line, 2.0, false);
 
         // Latest price: a soft halo + solid dot.
         if let Some(p) = pts.last() {
@@ -314,14 +342,16 @@ pub fn sparkline(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> An
         // Colored by the DAY change, matching the row's chip (the Stocks convention),
         // not by the sparkline window's own trend.
         let line = trend_color(q.change() >= 0.0);
-        let mut area = pts.clone();
-        area.push(Point::new(size.width, size.height));
-        area.push(Point::new(0.0, size.height));
+        // A thumbnail, so the spline is decoration rather than data: clipped to its own box so
+        // the curve's overshoot at a spike cannot paint over the row beside it.
+        d.save();
+        d.clip(Shape::Rect(Rect::new(0.0, 0.0, size.width, size.height)));
         d.fill(
-            Shape::Polygon(area),
+            area_path(&pts, size.height, true),
             LinearGradient::vertical(faded(line, 0.25), faded(line, 0.0)),
         );
-        polyline(d, &pts, line, 1.5);
+        polyline(d, &pts, line, 1.5, true);
+        d.restore();
     })
     .frame(84.0, 30.0)
 }
