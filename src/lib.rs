@@ -36,6 +36,7 @@ fn symbol_page(id: &str) -> AnyPiece {
                         size: Size::new(720.0, 640.0),
                         min_size: None,
                         app_name: None,
+                        ..Default::default()
                     },
                     day::WindowKind::Normal,
                     move || symbol_page(&id),
@@ -66,6 +67,7 @@ pub fn root() -> AnyPiece {
             size: Size::new(560.0, 640.0),
             min_size: None,
             app_name: None,
+            ..Default::default()
         },
         pages::settings_page,
     );
@@ -246,9 +248,7 @@ fn sidebar_header() -> AnyPiece {
     .any()
 }
 
-// Mobile / embedded entry points — each macro expands to nothing off its own platform.
-day::ios_main!("Day Tradr", root);
-day::macos_main!("Day Tradr", root);
-day::android_main!(root);
-day::arkui_main!(root);
-day::web_main!("Day Tradr", root);
+// The mobile / embedded entry point. Expands to the export each platform's shell binds
+// against — and to nothing at all on a plain cargo desktop build, where src/main.rs is the
+// entry instead.
+day::day_main!("Day Tradr", root);

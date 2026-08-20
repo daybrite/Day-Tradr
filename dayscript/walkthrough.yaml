@@ -45,15 +45,31 @@ flow:
   - assert_value: { id: sort-picker, value: 0 }
 
   # A watchlist card is tappable through to the detail page.
+  #
+  # The ROUTE is deliberately not asserted, and symbols are not reached by symbol route. A symbol
+  # is a top-level route only in the desktop sidebar; the phone shell pushes it onto the owning
+  # tab's stack, so its route nests instead (src/lib.rs) and `navigate: {route: AAPL}` finds no
+  # such route at all. Both assumptions failed on every phone run. What the tap is FOR — the
+  # detail page showing that symbol — is the same at every size, so assert that; and reach the
+  # next symbol through its row, since a SECTION key is what means the same thing everywhere.
   - tap: { id: wl-row-MSFT }
-  - assert_route: { route: MSFT }
   - wait_for: { id: detail-price }
+  - assert_text: { id: detail-symbol, text: "MSFT" }
   - assert_text: { id: detail-price, text: "514.52" }
   - assert_text: { id: detail-name, text: "Microsoft Corp." }
 
-  # Direct navigation by symbol key; the shared range picker re-slices the canvas chart.
-  - navigate: { route: AAPL }
+  # Another symbol, reached through the watchlist; the shared range picker re-slices the chart.
+  #
+  # BACK first, then the section. On a phone the detail was PUSHED onto the tab's stack, so
+  # selecting the tab again leaves that page on top and the rows underneath stay covered — the
+  # tap then lands on a row nobody can see and the detail never changes. Popping first puts the
+  # list back on top; on the desktop sidebar the pop clears the selection and the section
+  # navigation re-selects the watchlist, so the same two steps serve both shells.
+  - nav_back:
+  - navigate: { route: watchlist }
+  - tap: { id: wl-row-AAPL }
   - wait_for: { id: detail-price }
+  - assert_text: { id: detail-symbol, text: "AAPL" }
   - assert_text: { id: detail-price, text: "230.04" }
   - assert_text: { id: detail-chg, text: "−0.45 (0.20%)" }
   - select: { id: range-picker, index: 0 }
@@ -71,6 +87,12 @@ flow:
   - toggle: { id: overlay-toggle, value: true }
   - assert_visible: { id: overlay-legend }
 
+  # Leave the watchlist tab at its ROOT before switching tabs. Each tab owns its own push stack,
+  # so a detail page left on this one stays in the tree — and `detail-symbol` below would then
+  # match the symbol left here rather than the one the Symbols tab just opened. Ids are unique
+  # per page, not per tab.
+  - nav_back:
+
   # Manage: add a typed symbol (normalized to upper-case), visit it, remove it again so
   # reruns start from the same list.
   - navigate: { route: manage }
@@ -81,7 +103,18 @@ flow:
   - tap: { id: sym-add }
   - assert_text: { id: sym-status, key: manage_status_empty }
   - screenshot: manage
-  - navigate: { route: "SI=F" }
+  # Visit it through its own row: that row's tap calls `open_symbol`, the seam written to serve
+  # both shells, where a symbol ROUTE only exists on the desktop one.
+  #
+  # The reorder is what REALIZES the row. `sym-rows` is a recycling list, so the just-appended
+  # row exists only as data until something brings it into view, and every list step dayscript
+  # has (`reorder`, `delete_row`) addresses rows by INDEX — there is no id-addressed form to use
+  # instead. Moving it to the front once is what lets BOTH the visit and the removal below name
+  # it by id. The index is trustworthy now for a different reason: a capture matrix resets the
+  # app between variants, so the list really does start as the 6 defaults every time.
+  - scroll_to: { id: sym-rows }
+  - reorder: { id: sym-rows, from: 6, to: 0 }
+  - tap: { id: "sym-row-SI=F" }
   - wait_for: { id: detail-price }
   - assert_text: { id: detail-symbol, text: "SI=F" }
   - navigate: { route: manage }
@@ -90,9 +123,7 @@ flow:
   # just-added row sits beyond the list's viewport — surface it through the reorder seam
   # (which addresses rows by index, realized or not), then remove it. Removing it from the
   # front restores the original order, and the final swap-and-back exercises reorder alone.
-  - scroll_to: { id: sym-rows }
-  # The 6 default symbols occupy rows 0–5, so the just-added SI=F sits at row 6.
-  - reorder: { id: sym-rows, from: 6, to: 0 }
+  # Already at the front from the reorder above, so the row is realized and addressable by id.
   - tap: { id: "sym-remove-SI=F" }
   - assert_text: { id: sym-status, key: manage_status_removed }
   - reorder: { id: sym-rows, from: 1, to: 0 }
