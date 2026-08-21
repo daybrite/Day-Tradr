@@ -27,7 +27,7 @@ impl Status {
     }
 }
 
-pub fn manage_page() -> AnyPiece {
+pub fn manage_page() -> impl Piece {
     let sym_list = quotes::symbols();
     let entry = Signal::new(String::new());
     let status = Signal::new(Status::Idle);
@@ -50,8 +50,7 @@ pub fn manage_page() -> AnyPiece {
     // One recycling-list row per tracked symbol (drag to reorder — the order IS the sidebar
     // order, persisted with the list).
     let rows = list(
-        move || sym_list.get(),
-        |s: &String| s.clone(),
+        items(move || sym_list.get(), |s: &String| s.clone()),
         move |slot| {
             // Recycling rows (docs/list.md): cells rebind as the list changes or reorders, so
             // the action reads the slot's CURRENT key at click time and the id re-registers
@@ -148,7 +147,6 @@ pub fn manage_page() -> AnyPiece {
         .padding(16.0),
     )
     .grow()
-    .any()
 }
 
 /// Ask for a ticker and add it — the `+` in the Symbols tab's navigation bar, and the

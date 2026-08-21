@@ -137,7 +137,7 @@ fn area_path(pts: &[Point], baseline_y: f64, smooth: bool) -> Shape {
 /// The big price chart: gridlines with right-edge price labels, a gradient area fill under
 /// the price line, the line itself in trend color, a dashed reference line at the window's
 /// first close, first/last date labels, and a halo dot on the latest price.
-pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> AnyPiece {
+pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> impl Piece {
     let range = crate::quotes::range();
     canvas(move |d, size| {
         let Some(q) = quote.with(|l| l.ready().cloned()) else {
@@ -291,7 +291,7 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
 }
 
 /// The volume strip under the chart: one bar per day, trend-colored by that day's direction.
-pub fn volume_strip(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> AnyPiece {
+pub fn volume_strip(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> impl Piece {
     let range = crate::quotes::range();
     canvas(move |d, size| {
         let Some(q) = quote.with(|l| l.ready().cloned()) else {
@@ -325,7 +325,7 @@ pub fn volume_strip(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) ->
 }
 
 /// A watchlist-row sparkline: the last month as a tiny line + soft fill, trend-colored.
-pub fn sparkline(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> AnyPiece {
+pub fn sparkline(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> impl Piece {
     canvas(move |d, size| {
         let Some(q) = quote.with(|l| l.ready().cloned()) else {
             return;
@@ -368,7 +368,7 @@ pub fn range_bar(
     quote: Signal<day::reactive::Load<crate::quotes::Quote>>,
     lo: impl Fn(&crate::quotes::Quote) -> f64 + 'static,
     hi: impl Fn(&crate::quotes::Quote) -> f64 + 'static,
-) -> AnyPiece {
+) -> impl Piece {
     canvas(move |d, size| {
         let Some(q) = quote.with(|l| l.ready().cloned()) else {
             return;

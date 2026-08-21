@@ -26,7 +26,7 @@ fn stat(
     title: LocalizedText,
     quote: Signal<Load<quotes::Quote>>,
     value: impl Fn(&quotes::Quote) -> String + 'static,
-) -> AnyPiece {
+) -> impl Piece {
     column((
         label(title).font(Font::Caption),
         label(move || quote.with(|l| l.ready().map(&value).unwrap_or_default()))
@@ -36,7 +36,6 @@ fn stat(
     .spacing(1.0)
     .align(HAlign::Leading)
     .grow_w()
-    .any()
 }
 
 /// A titled range bar: caption over the low→high track with the price marked on it.
@@ -48,7 +47,7 @@ fn range_row(
     lo: impl Fn(&quotes::Quote) -> f64 + Copy + 'static,
     hi: impl Fn(&quotes::Quote) -> f64 + Copy + 'static,
     id: &str,
-) -> AnyPiece {
+) -> impl Piece {
     let lo_label = label(move || {
         quote.with(|l| {
             l.ready()
@@ -73,21 +72,19 @@ fn range_row(
     .spacing(2.0)
     .align(HAlign::Leading)
     .grow_w()
-    .any()
 }
 
 /// One overlay legend entry: a short colored rule beside its label.
-fn legend(color: Color, text: LocalizedText) -> AnyPiece {
+fn legend(color: Color, text: LocalizedText) -> impl Piece {
     row((
         rounded_rectangle(1.5).fill(color).frame(14.0, 3.0),
         label(text).font(Font::Caption2),
     ))
     .spacing(5.0)
     .align(VAlign::Center)
-    .any()
 }
 
-fn stats_grid(quote: Signal<Load<quotes::Quote>>) -> AnyPiece {
+fn stats_grid(quote: Signal<Load<quotes::Quote>>) -> impl Piece {
     // The day's and the year's high/low are NOT cells here — the range bars above show them
     // with the price positioned between them, which is strictly more information in less
     // space. What remains is what a bar cannot say.
@@ -119,7 +116,7 @@ fn stats_grid(quote: Signal<Load<quotes::Quote>>) -> AnyPiece {
     .corner_radius(12.0)
 }
 
-pub fn detail_page(symbol: &str) -> AnyPiece {
+pub fn detail_page(symbol: &str) -> impl Piece + use<> {
     let quote = quotes::resource_for(symbol).signal();
     let range = quotes::range();
     let symbol = symbol.to_string();
@@ -245,5 +242,4 @@ pub fn detail_page(symbol: &str) -> AnyPiece {
         .padding(16.0),
     )
     .grow()
-    .any()
 }

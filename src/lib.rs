@@ -23,7 +23,7 @@ fn symbol_page(id: &str) -> AnyPiece {
         // Normal window (quote resources and the shared range signal are app-global, so
         // every window tracks the same range — the Stocks-app behavior).
         if capability(Cap::MultiWindow) == Support::Unsupported {
-            return page;
+            return page.any();
         }
         let id = id.to_string();
         page.context_menu(vec![
@@ -43,13 +43,14 @@ fn symbol_page(id: &str) -> AnyPiece {
                 );
             }),
         ])
+        .any()
     } else {
         // A just-removed key mid-navigation: an empty pane, the selection resets right after.
         spacer().any()
     }
 }
 
-pub fn root() -> AnyPiece {
+pub fn root() -> impl Piece {
     // Registers every locale under `resource/locales/` (generated, §18.5), then applies the
     // persisted language/theme overrides before the first page builds.
     res::locales::install();
@@ -86,10 +87,11 @@ pub fn root() -> AnyPiece {
     // The nav id is applied HERE, to whichever shell was chosen — it is what every dayscript
     // waits on, and one call site keeps it honest: tagging both shells would read as a
     // duplicate to `day lint`, which cannot know the two are mutually exclusive.
+    // Two shells, two types: `Either` picks one without boxing either.
     let shell = if day::size_class().is_some_and(|c| !c.prefers_split()) {
-        tabbed_shell()
+        Either::Left(tabbed_shell())
     } else {
-        sidebar_shell()
+        Either::Right(sidebar_shell())
     };
     shell.id("nav")
 }
@@ -103,7 +105,7 @@ pub fn root() -> AnyPiece {
 /// not: the sidebar owns symbol keys at the top level (`MSFT`), while here a symbol is pushed
 /// onto the owning tab's stack and its route nests under the tab (`watchlist/MSFT`). Use
 /// [`open_symbol`] rather than `navigate` to reach a symbol from a page that serves both.
-fn tabbed_shell() -> AnyPiece {
+fn tabbed_shell() -> impl Piece {
     selector(tab())
         .style(SelectorStyle::Tabs)
         .item_icon(
@@ -124,7 +126,6 @@ fn tabbed_shell() -> AnyPiece {
             res::vectors::tab_settings.clone(),
             pages::settings_page,
         )
-        .any()
 }
 
 thread_local! {
@@ -177,17 +178,16 @@ pub fn open_symbol(symbol: &str) {
 /// The stack is what makes a row tappable on a phone at all. A watchlist row navigates by calling
 /// `navigate(symbol)` (pages/watchlist.rs), which needs a surface willing to accept the symbol as
 /// a route; with the page mounted bare in the tab there was none, so tapping a row did nothing.
-fn watchlist_stack() -> AnyPiece {
+fn watchlist_stack() -> impl Piece {
     stack(watchlist_path(), pages::watchlist_page())
         .title(res::str::nav_watchlist())
         .destination(|key: &String| symbol_page(key))
         .id("watchlist-stack")
-        .any()
 }
 
 /// The Symbols tab: the editable list as the stack's root, each row pushing that symbol's
 /// detail page, and a `+` in the navigation bar for adding one.
-fn symbols_stack() -> AnyPiece {
+fn symbols_stack() -> impl Piece {
     stack(symbols_path(), pages::manage_page())
         .title(res::str::nav_symbols())
         // The nav bar's trailing button (docs/navigation.md) — the phones have no window
@@ -199,11 +199,10 @@ fn symbols_stack() -> AnyPiece {
         )
         .destination(|key: &String| symbol_page(key))
         .id("symbols-stack")
-        .any()
 }
 
 /// The desktop shell: the sidebar this app has always had, with one row per tracked symbol.
-fn sidebar_shell() -> AnyPiece {
+fn sidebar_shell() -> impl Piece {
     let list = quotes::symbols();
     let section: Signal<Option<String>> = Signal::new(Some("watchlist".into()));
     selector(section)
@@ -232,10 +231,9 @@ fn sidebar_shell() -> AnyPiece {
             res::str::nav_settings(),
             pages::settings_page,
         )
-        .any()
 }
 
-fn sidebar_header() -> AnyPiece {
+fn sidebar_header() -> impl Piece {
     column((
         label(res::str::app_title())
             .font(Font::Headline)
@@ -245,7 +243,6 @@ fn sidebar_header() -> AnyPiece {
     .spacing(2.0)
     .align(HAlign::Leading)
     .padding(12.0)
-    .any()
 }
 
 // The mobile / embedded entry point. Expands to the export each platform's shell binds

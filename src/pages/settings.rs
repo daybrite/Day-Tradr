@@ -16,7 +16,7 @@ pub fn apply_startup() {
     day_piece_settings::apply_startup(PREF_THEME, PREF_LOCALE);
 }
 
-pub fn settings_page() -> AnyPiece {
+pub fn settings_page() -> impl Piece {
     let mut parts: Vec<AnyPiece> = vec![
         AnyPiece::new(
             section((
@@ -115,5 +115,4 @@ pub fn settings_page() -> AnyPiece {
             .padding(16.0),
     )
     .grow()
-    .any()
 }

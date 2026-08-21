@@ -22,7 +22,7 @@ pub fn change_text(q: &quotes::Quote, mode: quotes::ChipMode) -> String {
 /// The change chip: white text on the trend color, rounded — the Stocks signature. What it
 /// reads (absolute, percent, or both) is app-wide state driven by [`chip_mode_button`], so
 /// every chip on every page changes together.
-pub fn change_chip(quote: Signal<day::reactive::Load<quotes::Quote>>, id: String) -> AnyPiece {
+pub fn change_chip(quote: Signal<day::reactive::Load<quotes::Quote>>, id: String) -> impl Piece {
     let mode = quotes::chip_mode();
     label(move || {
         quote.with(|l| {
@@ -57,7 +57,7 @@ pub fn change_chip(quote: Signal<day::reactive::Load<quotes::Quote>>, id: String
 /// here: a watchlist chip sits inside a row whose own tap navigates to the detail page, so a
 /// tap would have to both cycle and navigate. An explicit button says what the next reading
 /// will be and belongs to no row.
-fn chip_mode_button() -> AnyPiece {
+fn chip_mode_button() -> impl Piece {
     let mode = quotes::chip_mode();
     button(move || match mode.get() {
         quotes::ChipMode::Both => res::str::chip_both().format(),
@@ -66,7 +66,6 @@ fn chip_mode_button() -> AnyPiece {
     })
     .action(quotes::cycle_chip_mode)
     .id("chip-mode")
-    .any()
 }
 
 /// Is this window too narrow to put controls side by side? Tracked, so crossing the breakpoint
@@ -78,7 +77,7 @@ fn compact_width() -> bool {
 
 /// Today's breadth over the whole watchlist: how many symbols are up, how many down, and the
 /// day's biggest mover each way — the summary a list of rows cannot give at a glance.
-fn breadth_strip(list: Signal<Vec<String>>) -> AnyPiece {
+fn breadth_strip(list: Signal<Vec<String>>) -> impl Piece {
     // BOTH lines take closures: the mover captions carry a live percentage, so a
     // once-formatted `LocalizedText` would freeze at the placeholder the first build saw.
     let cell = |value: Box<dyn Fn() -> String>,
@@ -160,7 +159,7 @@ fn breadth_strip(list: Signal<Vec<String>>) -> AnyPiece {
     .id("breadth")
 }
 
-fn row_card(symbol: String) -> AnyPiece {
+fn row_card(symbol: String) -> impl Piece {
     let quote = quotes::resource_for(&symbol).signal();
     let nav_to = symbol.clone();
     let title = symbol.clone();
@@ -205,7 +204,7 @@ fn row_card(symbol: String) -> AnyPiece {
     .id(format!("wl-row-{symbol}"))
 }
 
-pub fn watchlist_page() -> AnyPiece {
+pub fn watchlist_page() -> impl Piece {
     let list = quotes::symbols();
     let sort = quotes::sort();
     // The sort picker's labels, in `Sort::ALL` order.
@@ -290,8 +289,10 @@ pub fn watchlist_page() -> AnyPiece {
                 },
             ),
             each(
-                move || quotes::sorted_symbols(list.get(), sort.get()),
-                |s| s.clone(),
+                items(
+                    move || quotes::sorted_symbols(list.get(), sort.get()),
+                    |s| s.clone(),
+                ),
                 |slot| row_card(slot.key()),
             ),
             label(res::str::data_attribution()).font(Font::Caption2),
@@ -301,5 +302,4 @@ pub fn watchlist_page() -> AnyPiece {
         .padding(16.0),
     )
     .grow()
-    .any()
 }
