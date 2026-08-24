@@ -41,7 +41,9 @@ val daySigning = Properties().apply {
 }
 
 android {
-    namespace = "dev.daybrite.daytradr"
+    // Day.toml [app] id, conveyed by `day build`; the literal is the fresh-checkout
+    // fallback that lets Android Studio open this project before a Day build has run.
+    namespace = dayApp.getProperty("namespace") ?: "dev.daybrite.daytradr"
     compileSdk = 35
     defaultConfig {
         applicationId = dayApp.getProperty("applicationId") ?: "dev.daybrite.daytradr"
@@ -51,6 +53,7 @@ android {
         // The app label — Day.toml [app] title, resolved per target (an [app.android] override
         // wins); the manifest references it as ${dayTitle}.
         manifestPlaceholders["dayTitle"] = dayApp.getProperty("title") ?: "Day Tradr"
+        manifestPlaceholders["dayScheme"] = dayApp.getProperty("scheme") ?: "daytradr"
         versionName = dayApp.getProperty("versionName") ?: "0.1.0"
     }
     sourceSets {
