@@ -10,6 +10,11 @@ mod charts;
 mod pages;
 mod quotes;
 
+// The mobile / embedded entry point. Expands to the export each platform's shell binds
+// against — and to nothing at all on a plain cargo desktop build, where src/main.rs is the
+// entry instead.
+day::day_start!("Day Tradr", root);
+
 /// Typed constants for the files under `resource/`, generated at build time by `day-build`
 /// (§18.5): `res::str::<key>()` for every Fluent message plus the `res::locales` catalog.
 pub mod res {
@@ -244,8 +249,3 @@ fn sidebar_header() -> impl Piece {
     .align(HAlign::Leading)
     .padding(12.0)
 }
-
-// The mobile / embedded entry point. Expands to the export each platform's shell binds
-// against — and to nothing at all on a plain cargo desktop build, where src/main.rs is the
-// entry instead.
-day::day_main!("Day Tradr", root);
