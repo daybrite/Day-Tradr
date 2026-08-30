@@ -23,7 +23,8 @@
 //! so the SAME prices render on every target and dayscript can assert them verbatim.
 
 use day::prelude::*;
-use std::cell::{OnceCell, RefCell};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// The prefs key holding the watchlist as a comma-joined symbol list.
 const PREF_SYMBOLS: &str = "tradr.symbols";
@@ -233,36 +234,69 @@ impl std::error::Error for QuoteError {}
 // Watchlist store — the settings-Store pattern (a detached root-lifetime signal).
 // ---------------------------------------------------------------------------
 
-thread_local! {
-    static SYMBOLS: OnceCell<Signal<Vec<String>>> = const { OnceCell::new() };
-    /// The chart range every detail page shares (Apple-Stocks-style: switching range on one
-    /// symbol switches it for all). Index into `charts::RANGES`.
-    static RANGE: OnceCell<Signal<usize>> = const { OnceCell::new() };
+/// The app's watchlist and the settings that follow it (docs/state.md) — app-wide, because the
+/// watchlist IS the document and a preference chosen in one window is that choice everywhere.
+/// What a window is LOOKING at (its tab, its nav stacks, its chart range) is per-window and
+/// lives on `crate::Scene`.
+#[derive(Clone, Copy)]
+pub struct Watchlist {
+    symbols: Signal<Vec<String>>,
     /// Bumped by the settings Refresh action; every quote Resource tracks it.
-    static GENERATION: OnceCell<Signal<u64>> = const { OnceCell::new() };
+    generation: Signal<u64>,
+    proxy: Signal<String>,
+    sort: Signal<Sort>,
+    chip: Signal<ChipMode>,
+    overlay: Signal<bool>,
+}
+
+impl Ambient for Watchlist {
+    fn create() -> Self {
+        let seed: Vec<String> = match day_part_prefs::get(PREF_SYMBOLS) {
+            // A saved list wins, even an empty one; a fresh install gets the defaults.
+            // Entries saved under the previous provider's tickers are rewritten on the way in,
+            // so an upgrade keeps its watchlist instead of showing unknown symbols.
+            Some(joined) => joined
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(migrate_symbol)
+                .collect(),
+            None => DEFAULT_SYMBOLS.iter().map(|s| s.to_string()).collect(),
+        };
+        let proxy = match day_part_prefs::get(PREF_PROXY) {
+            // A SAVED empty string is honoured as "direct" — `is_some` distinguishes it from
+            // never having been set, so a web user who deliberately clears the field does not
+            // get the default handed back on next launch.
+            Some(v) => v,
+            None if cfg!(target_arch = "wasm32") => DEFAULT_WEB_PROXY.to_string(),
+            None => String::new(),
+        };
+        Watchlist {
+            symbols: Signal::new(seed),
+            generation: Signal::new(0),
+            proxy: Signal::new(proxy),
+            sort: Signal::new(
+                day_part_prefs::get(PREF_SORT)
+                    .map(|s| Sort::from_key(&s))
+                    .unwrap_or(Sort::Manual),
+            ),
+            chip: Signal::new(
+                day_part_prefs::get(PREF_CHIP)
+                    .map(|s| ChipMode::from_key(&s))
+                    .unwrap_or(ChipMode::Both),
+            ),
+            overlay: Signal::new(day_part_prefs::get(PREF_OVERLAY).is_none_or(|s| s != "0")),
+        }
+    }
 }
 
 pub fn symbols() -> Signal<Vec<String>> {
-    SYMBOLS.with(|cell| {
-        *cell.get_or_init(|| {
-            let seed: Vec<String> = match day_part_prefs::get(PREF_SYMBOLS) {
-                // A saved list wins, even an empty one; a fresh install gets the defaults.
-                // Entries saved under the previous provider's tickers are rewritten on the way
-                // in, so an upgrade keeps its watchlist instead of showing unknown symbols.
-                Some(joined) => joined
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .map(migrate_symbol)
-                    .collect(),
-                None => DEFAULT_SYMBOLS.iter().map(|s| s.to_string()).collect(),
-            };
-            Scope::detached().enter(|| Signal::new(seed))
-        })
-    })
+    Watchlist::app().symbols
 }
 
+/// The chart range this WINDOW shows (Apple-Stocks-style: switching range on one symbol
+/// switches it for every symbol — in this window). Index into `charts::RANGES`.
 pub fn range() -> Signal<usize> {
-    RANGE.with(|cell| *cell.get_or_init(|| Scope::detached().enter(|| Signal::new(3)))) // 1Y
+    crate::scene().range
 }
 
 /// How the watchlist is ordered. `Manual` is the drag-reordered list the user owns; the other
@@ -329,30 +363,12 @@ impl ChipMode {
     }
 }
 
-thread_local! {
-    static PROXY: OnceCell<Signal<String>> = const { OnceCell::new() };
-    static SORT: OnceCell<Signal<Sort>> = const { OnceCell::new() };
-    static CHIP: OnceCell<Signal<ChipMode>> = const { OnceCell::new() };
-    static OVERLAY: OnceCell<Signal<bool>> = const { OnceCell::new() };
-}
-
 /// The proxy template, persisted. Seeded from prefs; a fresh install gets
 /// [`DEFAULT_WEB_PROXY`] on the web build and nothing anywhere else. A SAVED empty string is
 /// honoured as "direct" — `is_some` distinguishes it from never having been set, so a web user
 /// who deliberately clears the field does not get the default handed back on next launch.
 pub fn proxy() -> Signal<String> {
-    PROXY.with(|cell| {
-        *cell.get_or_init(|| {
-            let seed = day_part_prefs::get(PREF_PROXY).unwrap_or_else(|| {
-                if cfg!(feature = "dom") {
-                    DEFAULT_WEB_PROXY.to_string()
-                } else {
-                    String::new()
-                }
-            });
-            Scope::detached().enter(|| Signal::new(seed))
-        })
-    })
+    Watchlist::app().proxy
 }
 
 pub fn set_proxy(template: &str) {
@@ -404,14 +420,7 @@ fn path_and_query(url: &str) -> &str {
 }
 
 pub fn sort() -> Signal<Sort> {
-    SORT.with(|cell| {
-        *cell.get_or_init(|| {
-            let seed = day_part_prefs::get(PREF_SORT)
-                .map(|s| Sort::from_key(&s))
-                .unwrap_or(Sort::Manual);
-            Scope::detached().enter(|| Signal::new(seed))
-        })
-    })
+    Watchlist::app().sort
 }
 
 pub fn set_sort(v: Sort) {
@@ -420,14 +429,7 @@ pub fn set_sort(v: Sort) {
 }
 
 pub fn chip_mode() -> Signal<ChipMode> {
-    CHIP.with(|cell| {
-        *cell.get_or_init(|| {
-            let seed = day_part_prefs::get(PREF_CHIP)
-                .map(|s| ChipMode::from_key(&s))
-                .unwrap_or(ChipMode::Both);
-            Scope::detached().enter(|| Signal::new(seed))
-        })
-    })
+    Watchlist::app().chip
 }
 
 /// Advance every chip one step and remember it.
@@ -439,12 +441,7 @@ pub fn cycle_chip_mode() {
 
 /// Whether the detail chart draws its moving-average overlays.
 pub fn overlay() -> Signal<bool> {
-    OVERLAY.with(|cell| {
-        *cell.get_or_init(|| {
-            let seed = day_part_prefs::get(PREF_OVERLAY).is_none_or(|s| s != "0");
-            Scope::detached().enter(|| Signal::new(seed))
-        })
-    })
+    Watchlist::app().overlay
 }
 
 /// Write the overlay preference to disk WITHOUT touching the signal.
@@ -523,7 +520,7 @@ pub fn breadth(list: &[String]) -> Option<Breadth> {
 }
 
 fn generation() -> Signal<u64> {
-    GENERATION.with(|cell| *cell.get_or_init(|| Scope::detached().enter(|| Signal::new(0))))
+    Watchlist::app().generation
 }
 
 fn persist(list: &[String]) {
@@ -581,13 +578,20 @@ pub fn reload_all() {
 // Per-symbol Resources, memoized by symbol (the Day-Skies STATES pattern).
 // ---------------------------------------------------------------------------
 
-thread_local! {
-    static STATES: RefCell<Vec<(String, day::reactive::Resource<Quote>)>> =
-        const { RefCell::new(Vec::new()) };
+/// Per-symbol quote Resources, memoized by symbol. APP-wide (docs/state.md): a fetch CACHE over
+/// shared data, so two windows watching the same symbol read one load.
+#[derive(Clone)]
+struct Quotes(Rc<RefCell<Vec<(String, day::reactive::Resource<Quote>)>>>);
+
+impl Ambient for Quotes {
+    fn create() -> Self {
+        Quotes(Rc::new(RefCell::new(Vec::new())))
+    }
 }
 
 pub fn resource_for(symbol: &str) -> day::reactive::Resource<Quote> {
-    STATES.with(|cell| {
+    let cell = Quotes::app().0;
+    {
         if let Some((_, r)) = cell.borrow().iter().find(|(s, _)| s == symbol) {
             return *r;
         }
@@ -599,11 +603,11 @@ pub fn resource_for(symbol: &str) -> day::reactive::Resource<Quote> {
         });
         cell.borrow_mut().push((symbol.to_string(), r));
         r
-    })
+    }
 }
 
 fn drop_state(symbol: &str) {
-    STATES.with(|cell| cell.borrow_mut().retain(|(s, _)| s != symbol));
+    Quotes::app().0.borrow_mut().retain(|(s, _)| s != symbol);
 }
 
 /// Is the app forced into deterministic mock mode? `day::env` rather than `std::env`: on

@@ -4,7 +4,6 @@
 //! watchlist overview, a canvas-drawn detail chart per instrument, and manage/settings pages.
 
 use day::prelude::*;
-use std::cell::OnceCell;
 
 mod charts;
 mod pages;
@@ -92,13 +91,24 @@ pub fn root() -> impl Piece {
     // The nav id is applied HERE, to whichever shell was chosen — it is what every dayscript
     // waits on, and one call site keeps it honest: tagging both shells would read as a
     // duplicate to `day lint`, which cannot know the two are mutually exclusive.
-    // Two shells, two types: `Either` picks one without boxing either.
-    let shell = if day::size_class().is_some_and(|c| !c.prefers_split()) {
-        Either::Left(tabbed_shell())
-    } else {
-        Either::Right(sidebar_shell())
-    };
-    shell.id("nav")
+    // File ▸ New Window (docs/windows.md): the SAME shell again, which is why the tab, the two
+    // push stacks and the chart range live on a `Scene` — each window gets its own.
+    day::register_new_window(window_shell);
+
+    window_shell()
+}
+
+/// One window's UI — the first window's, and every File ▸ New Window's.
+fn window_shell() -> impl Piece {
+    Scene::scoped(|_scene| {
+        // Two shells, two types: `Either` picks one without boxing either.
+        let shell = if day::size_class().is_some_and(|c| !c.prefers_split()) {
+            Either::Left(tabbed_shell())
+        } else {
+            Either::Right(sidebar_shell())
+        };
+        shell.id("nav")
+    })
 }
 
 /// The phone shell: three tabs, Watchlist first. EACH tab that can reach a symbol carries its own
@@ -133,25 +143,56 @@ fn tabbed_shell() -> impl Piece {
         )
 }
 
-thread_local! {
-    /// The phone shell's state, held outside the build so a page can reach it and so a rebuild
-    /// (a size-class morph) keeps the tab and both stacks where the user left them.
-    static TAB: OnceCell<Signal<String>> = const { OnceCell::new() };
-    static WATCHLIST_PATH: OnceCell<Signal<Vec<String>>> = const { OnceCell::new() };
-    static SYMBOLS_PATH: OnceCell<Signal<Vec<String>>> = const { OnceCell::new() };
+/// Everything ONE WINDOW owns (docs/state.md): which tab it is on, each tab's push stack, and
+/// the chart range it is showing. The watchlist itself and every persisted preference are
+/// app-wide (`quotes::Watchlist`) — the list of symbols you track is the same list in every
+/// window; where you are in it is not.
+///
+/// Held outside the piece build (in the window's scope, via `Ambient::scoped`) so a page can
+/// reach it and so a rebuild — a size-class morph between the tabbed and sidebar shells — keeps
+/// the tab and both stacks where the user left them.
+#[derive(Clone, Copy)]
+pub(crate) struct Scene {
+    /// Tabs always have a selection, so the key is plain, not an `Option`.
+    tab: Signal<String>,
+    watchlist_path: Signal<Vec<String>>,
+    symbols_path: Signal<Vec<String>>,
+    pub(crate) range: Signal<usize>,
 }
 
-/// Tabs always have a selection, so the signal is a plain key, not an `Option`.
+impl Ambient for Scene {
+    fn create() -> Self {
+        Scene {
+            tab: Signal::new("watchlist".into()),
+            watchlist_path: Signal::new(Vec::new()),
+            symbols_path: Signal::new(Vec::new()),
+            range: Signal::new(3), // 1Y
+        }
+    }
+}
+
+/// This window's `Scene`.
+///
+/// Two resolutions, because there are two moments a page reaches for it. While a piece BUILDS,
+/// the ambient one is this window's. Later — a row tap, a menu item, anything that runs from a
+/// handler — there is no build scope to read from, and the window the user is looking at is the
+/// one the command means: that is `focused()` (docs/state.md).
+pub(crate) fn scene() -> Scene {
+    Scene::try_ambient()
+        .or_else(Scene::focused)
+        .expect("no window is open, so there is no Scene to act on")
+}
+
 fn tab() -> Signal<String> {
-    TAB.with(|c| *c.get_or_init(|| Scope::detached().enter(|| Signal::new("watchlist".into()))))
+    scene().tab
 }
 
 fn watchlist_path() -> Signal<Vec<String>> {
-    WATCHLIST_PATH.with(|c| *c.get_or_init(|| Scope::detached().enter(|| Signal::new(Vec::new()))))
+    scene().watchlist_path
 }
 
 fn symbols_path() -> Signal<Vec<String>> {
-    SYMBOLS_PATH.with(|c| *c.get_or_init(|| Scope::detached().enter(|| Signal::new(Vec::new()))))
+    scene().symbols_path
 }
 
 /// Open a symbol's detail page, whichever shell is live.
