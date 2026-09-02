@@ -110,8 +110,10 @@ flow:
   # row exists only as data until something brings it into view, and every list step dayscript
   # has (`reorder`, `delete_row`) addresses rows by INDEX — there is no id-addressed form to use
   # instead. Moving it to the front once is what lets BOTH the visit and the removal below name
-  # it by id. The index is trustworthy now for a different reason: a capture matrix resets the
-  # app between variants, so the list really does start as the 6 defaults every time.
+  # it by id. The index is trustworthy because this script leaves the list as it found it: a
+  # capture matrix keeps the app installed and its state between variants (iOS in particular
+  # keeps NSUserDefaults across a relaunch), so every variant starts from the previous one's
+  # end, and the removal below is what makes that the 6 defaults again.
   - scroll_to: { id: sym-rows }
   - reorder: { id: sym-rows, from: 6, to: 0 }
   - tap: { id: "sym-row-SI=F" }
