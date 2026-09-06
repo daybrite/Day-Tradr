@@ -236,12 +236,13 @@ fn watchlist_stack() -> impl Piece {
 fn symbols_stack() -> impl Piece {
     stack(symbols_path(), pages::manage_page())
         .title(res::str::nav_symbols())
-        // The nav bar's trailing button (docs/navigation.md) — the phones have no window
-        // toolbar to put this in.
-        .bar_action(
-            res::vectors::add_symbol.clone(),
-            res::str::menu_add_symbol(),
-            pages::prompt_for_symbol,
+        // Adding acts on the LIST this stack's root shows, so it rides the root page's chrome
+        // (docs/toolbars.md) and is gone from the symbol pages pushed over it.
+        .toolbar(
+            toolbar_button("tb-add-symbol", res::str::menu_add_symbol())
+                .image(res::vectors::add_symbol.clone())
+                .placement(ToolbarPlacement::Primary)
+                .action(pages::prompt_for_symbol),
         )
         .destination(|key: &String| symbol_page(key))
         .id("symbols-stack")

@@ -5,10 +5,10 @@ Rust codebase and rendered with the platform's own widgets on iPhone, Android, M
 HarmonyOS, and the web.
 
 <p align="center">
-  <img src="https://daybrite.github.io/Day-Tradr/gallery/ios-uikit/en/watchlist.png" width="200" alt="The watchlist on iPhone">
-  <img src="https://daybrite.github.io/Day-Tradr/gallery/android-mdc/en/detail.png" width="200" alt="A symbol's detail on Android">
-  <img src="https://daybrite.github.io/Day-Tradr/gallery/ios-uikit/en/detail-1m.png" width="200" alt="One month of a symbol on iPhone">
-  <img src="https://daybrite.github.io/Day-Tradr/gallery/android-mdc/en/manage.png" width="200" alt="Managing the watchlist on Android">
+  <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/ios-uikit/en/watchlist.png" width="200" alt="The watchlist on iPhone"></kbd>
+  <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/android-mdc/en/detail.png" width="200" alt="A symbol's detail on Android"></kbd>
+  <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/ios-uikit/en/detail-1m.png" width="200" alt="One month of a symbol on iPhone"></kbd>
+  <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/android-mdc/en/manage.png" width="200" alt="Managing the watchlist on Android"></kbd>
 </p>
 
 ## Run it in one command
@@ -31,7 +31,7 @@ the price, and a change chip. Tap the chip to cycle it between the change, the p
 both, and sort the list by your own order, by name, or by today's move.
 
 <p align="center">
-  <img src="https://daybrite.github.io/Day-Tradr/gallery/macos-appkit/en/detail.png" width="720" alt="A symbol's detail on macOS, with the watchlist in the sidebar">
+  <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/macos-appkit/en/detail.png" width="720" alt="A symbol's detail on macOS, with the watchlist in the sidebar"></kbd>
 </p>
 
 Tap a symbol for the full picture: a price chart with 20-day and 50-day moving averages you can
@@ -54,19 +54,19 @@ publishes the results to the [gallery](https://daybrite.dev/gallery/Day-Tradr/).
 
 | macOS · AppKit | Windows · XAML | Linux · GTK |
 |:---:|:---:|:---:|
-| <img src="https://daybrite.github.io/Day-Tradr/gallery/macos-appkit/en/watchlist.png" width="300" alt="Watchlist on macOS"> | <img src="https://daybrite.github.io/Day-Tradr/gallery/windows-xaml/en/watchlist.png" width="300" alt="Watchlist on Windows"> | <img src="https://daybrite.github.io/Day-Tradr/gallery/linux-gtk/en/watchlist.png" width="300" alt="Watchlist on GTK"> |
+| <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/macos-appkit/en/watchlist.png" width="300" alt="Watchlist on macOS"></kbd> | <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/windows-xaml/en/watchlist.png" width="300" alt="Watchlist on Windows"></kbd> | <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/linux-gtk/en/watchlist.png" width="300" alt="Watchlist on GTK"></kbd> |
 
 | Linux · Qt | Web · DOM | HarmonyOS · ArkUI |
 |:---:|:---:|:---:|
-| <img src="https://daybrite.github.io/Day-Tradr/gallery/linux-qt/en/detail.png" width="300" alt="Detail on Qt"> | <img src="https://daybrite.github.io/Day-Tradr/gallery/web-dom/en/detail.png" width="300" alt="Detail in the browser"> | <img src="https://daybrite.github.io/Day-Tradr/gallery/harmony-arkui/en/detail.png" width="150" alt="Detail on HarmonyOS"> |
+| <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/linux-qt/en/detail.png" width="300" alt="Detail on Qt"></kbd> | <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/web-dom/en/detail.png" width="300" alt="Detail in the browser"></kbd> | <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/harmony-arkui/en/detail.png" width="150" alt="Detail on HarmonyOS"></kbd> |
 
 The sorted list, the absolute-change chips, and the Arabic layout:
 
 <p align="center">
-  <img src="https://daybrite.github.io/Day-Tradr/gallery/ios-uikit/en/watchlist-sorted.png" width="200" alt="Watchlist sorted by today's move, on iPhone">
-  <img src="https://daybrite.github.io/Day-Tradr/gallery/android-mdc/en/watchlist-chip-absolute.png" width="200" alt="Absolute-change chips on Android">
-  <img src="https://daybrite.github.io/Day-Tradr/gallery/ios-uikit/ar/watchlist.png" width="200" alt="The watchlist in Arabic on iPhone">
-  <img src="https://daybrite.github.io/Day-Tradr/gallery/android-mdc/fr/settings.png" width="200" alt="Settings in French on Android">
+  <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/ios-uikit/en/watchlist-sorted.png" width="200" alt="Watchlist sorted by today's move, on iPhone"></kbd>
+  <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/android-mdc/en/watchlist-chip-absolute.png" width="200" alt="Absolute-change chips on Android"></kbd>
+  <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/ios-uikit/ar/watchlist.png" width="200" alt="The watchlist in Arabic on iPhone"></kbd>
+  <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/android-mdc/fr/settings.png" width="200" alt="Settings in French on Android"></kbd>
 </p>
 
 ## Build from a clone
