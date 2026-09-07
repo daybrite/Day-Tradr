@@ -179,6 +179,7 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
                     size: 10.0,
                     color: axis_text(dark),
                     anchor: TextAnchor::Leading,
+                    ..Default::default()
                 },
             );
             gy += step;
@@ -271,6 +272,7 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
                     size: 10.0,
                     color: axis_text(dark),
                     anchor: TextAnchor::Leading,
+                    ..Default::default()
                 },
             );
             // No trailing anchor in the canvas text API — center the label just inside
@@ -282,6 +284,7 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
                     size: 10.0,
                     color: axis_text(dark),
                     anchor: TextAnchor::Centered,
+                    ..Default::default()
                 },
             );
         }
