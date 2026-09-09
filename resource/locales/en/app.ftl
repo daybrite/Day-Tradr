@@ -92,3 +92,11 @@ settings_proxy_hint = Quote requests go through this. Use %u where the whole Yah
 settings_proxy_apply = Apply
 settings_proxy_relay = Use Daybrite relay
 settings_proxy_direct = Fetch directly
+
+# The analysis panel under the detail chart, and the watchlist's performance card
+analysis_label = Analysis
+analysis_drawdown = Drawdown
+analysis_returns = Daily moves
+analysis_monthly = Monthly
+axis_return = One-session move
+performance_title = Performance, indexed to 100

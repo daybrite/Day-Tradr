@@ -1,6 +1,7 @@
-//! The watchlist: one rich card per tracked symbol — name, sparkline, price, and a colored
-//! change chip — reconciled by `each` (rows keep their state as the list changes) and tappable
-//! through to the symbol's detail page.
+//! The watchlist: the day's breadth with its donut, every symbol's performance on one indexed
+//! chart over the shared range, then one rich card per tracked symbol — name, sparkline, price,
+//! and a colored change chip — reconciled by `each` (rows keep their state as the list changes)
+//! and tappable through to the symbol's detail page.
 
 use crate::charts;
 use crate::quotes;
@@ -71,7 +72,7 @@ fn chip_mode_button() -> impl Piece {
 /// Is this window too narrow to put controls side by side? Tracked, so crossing the breakpoint
 /// (a phone rotating, a desktop window dragged narrow) re-lays the controls in place. A backend
 /// that reports no class is treated as roomy — every one that does report is a real measurement.
-fn compact_width() -> bool {
+pub(crate) fn compact_width() -> bool {
     day::size_class().is_some_and(|c| !c.prefers_split())
 }
 
@@ -114,6 +115,8 @@ fn breadth_strip(list: Signal<Vec<String>>) -> impl Piece {
             .unwrap_or_else(|| "—".to_string())
     };
     row((
+        // The same two counts as a ring, so the day's balance reads before the numbers do.
+        charts::breadth_donut(list).id("breadth-donut"),
         cell(
             Box::new(move || {
                 quotes::breadth(&list.get())
@@ -148,6 +151,7 @@ fn breadth_strip(list: Signal<Vec<String>>) -> impl Piece {
         ),
     ))
     .spacing(10.0)
+    .align(VAlign::Center)
     .padding(Insets {
         top: 10.0,
         bottom: 10.0,
@@ -157,6 +161,46 @@ fn breadth_strip(list: Signal<Vec<String>>) -> impl Piece {
     .background(Color::rgba(0.5, 0.5, 0.5, 0.10))
     .corner_radius(12.0)
     .id("breadth")
+}
+
+/// Every symbol's move over the shared range on one axis, each indexed to 100 at the window's
+/// start, so the lines read as relative performance whatever the instruments' prices. The range
+/// picker is the detail page's own signal: the range chosen here is the one a symbol opens on.
+fn performance_card(list: Signal<Vec<String>>) -> impl Piece {
+    let ranges: Vec<String> = charts::RANGES.iter().map(|(n, _)| n.to_string()).collect();
+    let title = label(res::str::performance_title()).font(Font::Headline);
+    let range_picker = picker(ranges, quotes::range())
+        .segmented()
+        .id("wl-range-picker");
+    // The title and a five-segment picker do not fit side by side on a phone; there they stack.
+    let header = if compact_width() {
+        column((title, range_picker))
+            .spacing(8.0)
+            .align(HAlign::Leading)
+            .grow_w()
+            .any()
+    } else {
+        row((title, spacer(), range_picker))
+            .spacing(10.0)
+            .align(VAlign::Center)
+            .grow_w()
+            .any()
+    };
+    column((
+        header,
+        charts::performance_chart(list).id("performance-chart"),
+    ))
+    .spacing(8.0)
+    .align(HAlign::Leading)
+    .padding(Insets {
+        top: 10.0,
+        bottom: 10.0,
+        leading: 14.0,
+        trailing: 14.0,
+    })
+    .background(Color::rgba(0.5, 0.5, 0.5, 0.10))
+    .corner_radius(12.0)
+    .id("performance")
 }
 
 fn row_card(symbol: String) -> impl Piece {
@@ -261,6 +305,10 @@ pub fn watchlist_page() -> impl Piece {
                 },
             ),
             when(move || !list.get().is_empty(), move || breadth_strip(list)),
+            when(
+                move || !list.get().is_empty(),
+                move || performance_card(list),
+            ),
             // List-wide controls, laid out for the width available. Side by side needs room
             // for a three-segment picker AND the chip button; at compact width that overflows —
             // on a 392dp phone the localized segments alone eat the row and the button lands

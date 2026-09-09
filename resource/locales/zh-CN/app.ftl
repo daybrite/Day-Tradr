@@ -90,3 +90,11 @@ settings_proxy_hint = 行情请求经由此处发出。用 %u 标记插入完整
 settings_proxy_apply = 应用
 settings_proxy_relay = 使用 Daybrite 中继
 settings_proxy_direct = 直接请求
+
+# 详情图表下方的分析面板，以及自选列表的表现卡片
+analysis_label = 分析
+analysis_drawdown = 回撤
+analysis_returns = 每日涨跌
+analysis_monthly = 月度
+axis_return = 单日涨跌幅
+performance_title = 表现（起点 = 100）

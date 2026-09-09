@@ -1,9 +1,10 @@
-//! One instrument's page: big price header with change chip, the shared range picker, the
-//! canvas price chart + volume strip, and a three-column stats grid — every value bound to
-//! the symbol's reactive [`Resource`] so a refetch or range tap updates in place.
+//! One instrument's page: big price header with change chip, the shared range picker, the price
+//! chart + volume strip, an analysis panel with three readings of the same history, the range
+//! tracks, and a three-column stats grid — every value bound to the symbol's reactive
+//! [`Resource`] so a refetch or range tap updates in place.
 
 use crate::charts;
-use crate::pages::watchlist::change_chip;
+use crate::pages::watchlist::{change_chip, compact_width};
 use crate::quotes;
 use crate::res;
 use day::prelude::*;
@@ -82,6 +83,58 @@ fn legend(color: Color, text: LocalizedText) -> impl Piece {
     ))
     .spacing(5.0)
     .align(VAlign::Center)
+}
+
+/// The analysis panel under the chart: how far the price sits below its peak, how its daily
+/// moves are distributed, or how each calendar month went — one at a time, picked by a segmented
+/// control. Three charts rather than one with switching marks, because each is a different
+/// composition — a time axis, a continuous histogram axis, two categorical axes — and the axes
+/// are properties of the chart, not of its marks. The choice is page-local: a way of looking at
+/// this symbol, not a setting.
+fn analysis_panel(quote: Signal<Load<quotes::Quote>>) -> impl Piece {
+    let picked = Signal::new(0usize);
+    let names: Vec<String> = vec![
+        res::str::analysis_drawdown().format(),
+        res::str::analysis_returns().format(),
+        res::str::analysis_monthly().format(),
+    ];
+    let title = label(res::str::analysis_label()).font(Font::Callout);
+    let control = picker(names, picked).segmented().id("analysis-picker");
+    // The caption and a three-segment picker share a row where there is room; on a phone the
+    // picker takes the whole width, or its last segment lands off-screen.
+    let header = if compact_width() {
+        column((title, control))
+            .spacing(6.0)
+            .align(HAlign::Leading)
+            .grow_w()
+            .any()
+    } else {
+        row((title, spacer(), control))
+            .spacing(10.0)
+            .align(VAlign::Center)
+            .grow_w()
+            .any()
+    };
+    column((
+        header,
+        when(
+            move || picked.get() == 1,
+            move || {
+                charts::returns_histogram(quote, res::str::axis_return().format())
+                    .id("analysis-returns")
+            },
+        )
+        .otherwise(move || {
+            when(
+                move || picked.get() == 2,
+                move || charts::monthly_heat_map(quote).id("analysis-monthly"),
+            )
+            .otherwise(move || charts::drawdown_chart(quote).id("analysis-drawdown"))
+        }),
+    ))
+    .spacing(8.0)
+    .align(HAlign::Leading)
+    .grow_w()
 }
 
 fn stats_grid(quote: Signal<Load<quotes::Quote>>) -> impl Piece {
@@ -214,6 +267,7 @@ pub fn detail_page(symbol: &str) -> impl Piece + use<> {
             .align(VAlign::Center)
             .grow_w(),
             charts::volume_strip(quote),
+            analysis_panel(quote),
             // Where the price sits inside today's band and inside the year's — the reading the
             // stats cells below give as bare numbers.
             row((

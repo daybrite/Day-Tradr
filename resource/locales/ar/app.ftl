@@ -90,3 +90,11 @@ settings_proxy_hint = تمر طلبات الأسعار عبره. استخدم �
 settings_proxy_apply = تطبيق
 settings_proxy_relay = استخدام وسيط Daybrite
 settings_proxy_direct = جلب مباشر
+
+# لوحة التحليل أسفل الرسم البياني، وبطاقة الأداء في قائمة المتابعة
+analysis_label = التحليل
+analysis_drawdown = التراجع
+analysis_returns = التحركات اليومية
+analysis_monthly = شهري
+axis_return = التحرك في جلسة واحدة
+performance_title = الأداء، مؤشر إلى ١٠٠

@@ -1,9 +1,19 @@
-//! Canvas drawing for Day Tradr: the detail page's price chart + volume strip, and the
-//! watchlist's sparklines (https://daybrite.dev/docs/shapes — §11 canvas). Every closure here
-//! is a reactive display list: it reads the quote/range signals, so a range tap or a refetch
-//! re-records and the backend replays natively.
+//! Day Tradr's charts, composed from [`day_piece_charts`]: the detail page's price chart with its
+//! volume strip and analysis panel, the watchlist's sparklines and performance comparison, the
+//! breadth donut, and the range tracks. Every marks closure is a reactive binding: it reads the
+//! quote and range signals, so a range tap or a refetch re-records the chart in place.
+//!
+//! Nothing here touches the canvas directly. A chart is a bag of marks plus scales, guides and a
+//! coordinate system, and the crate draws the same display list on every target.
 
+use crate::quotes::{self, Quote};
 use day::prelude::*;
+use day::reactive::Load;
+use day_piece_charts as ch;
+use day_piece_charts::{
+    AnnotationPosition, Coordinate, Datum, Insets, Interpolation, LegendPosition, Mark, chart,
+    date, value,
+};
 
 /// The range picker's slices, in trading days (`usize::MAX` = everything the source has).
 pub const RANGES: [(&str, usize); 5] = [
@@ -43,320 +53,479 @@ fn grid_color(dark: bool) -> Color {
     }
 }
 
-fn axis_text(dark: bool) -> Color {
-    if dark {
-        Color::rgba(1.0, 1.0, 1.0, 0.55)
-    } else {
-        Color::rgba(0.0, 0.0, 0.0, 0.45)
-    }
+/// The margins the price chart, the volume strip and the drawdown chart all share, so their time
+/// axes line up: the trailing column holds the price labels, and the leading edge leaves room for
+/// the first date label to hang past the plot.
+const STACKED_INSETS: Insets = Insets {
+    top: 8.0,
+    leading: 12.0,
+    bottom: 20.0,
+    trailing: 56.0,
+};
+
+/// The same margins with no room for an axis, for the strip under the chart.
+const STRIP_INSETS: Insets = Insets {
+    top: 0.0,
+    leading: 12.0,
+    bottom: 0.0,
+    trailing: 56.0,
+};
+
+/// The trading days the range picker currently shows.
+fn window_days() -> usize {
+    RANGES[quotes::range().get().min(RANGES.len() - 1)].1
 }
 
-/// Round a raw interval up to a "nice" 1/2/5×10ⁿ step for the horizontal gridlines.
-fn nice_step(raw: f64) -> f64 {
-    if raw <= 0.0 {
-        return 1.0;
+/// The closes in view and the dates aligned with them, or nothing when there is too little to
+/// draw a line through.
+fn window(q: &Quote, days: usize) -> Option<(&[f64], &[String])> {
+    let closes = quotes::tail(&q.closes, days);
+    if closes.len() < 2 {
+        return None;
     }
-    let mag = 10f64.powf(raw.log10().floor());
-    let norm = raw / mag;
-    let n = if norm <= 1.0 {
-        1.0
-    } else if norm <= 2.0 {
-        2.0
-    } else if norm <= 5.0 {
-        5.0
-    } else {
-        10.0
-    };
-    n * mag
+    let dates = &q.dates[q.dates.len() - closes.len()..];
+    Some((closes, dates))
 }
 
-/// Map a series slice into x/y points within `rect` (y inverted: larger price = higher).
-fn project(closes: &[f64], min: f64, max: f64, rect: Rect) -> Vec<Point> {
-    let n = closes.len();
-    let span = (max - min).max(1e-9);
-    closes
+/// The y domain a price chart shows: the window's own extent, padded so the line never touches the
+/// plot edge. Pinned rather than inferred because the moving averages can run outside the window's
+/// prices, and an average that stretched the axis would flatten the line it is meant to explain.
+fn price_domain(closes: &[f64]) -> (f64, f64) {
+    let (min, max) = closes
         .iter()
-        .enumerate()
-        .map(|(i, c)| {
-            let fx = if n <= 1 {
-                1.0
-            } else {
-                i as f64 / (n - 1) as f64
-            };
-            Point::new(
-                rect.origin.x + fx * rect.size.width,
-                rect.origin.y + (1.0 - (c - min) / span) * rect.size.height,
-            )
-        })
-        .collect()
+        .fold((f64::MAX, f64::MIN), |(lo, hi), c| (lo.min(*c), hi.max(*c)));
+    let pad = ((max - min) * 0.08).max(max * 0.002);
+    (min - pad, max + pad)
 }
 
-/// Stroke a series as ONE path.
-///
-/// Was one `Shape::Line` per segment, which is 250 ops for a year of daily closes and leaves
-/// every corner unjoined. A single path with round caps and joins is one op and renders the
-/// turns properly.
-///
-/// `smooth` fits a Catmull-Rom spline through the points instead of connecting them straight.
-/// Reserved for the SPARKLINE: a spline implies values between the samples, which is decorative
-/// at thumbnail size and misleading on a chart someone reads prices off.
-fn polyline(d: &mut day::prelude::Draw, pts: &[Point], color: Color, width: f64, smooth: bool) {
-    if pts.len() < 2 {
-        return;
-    }
-    let mut b = PathBuilder::new();
-    if smooth {
-        b = b.smooth_polyline(pts, 0.65);
-    } else {
-        b = b.move_to(pts[0]);
-        for p in &pts[1..] {
-            b = b.line_to(*p);
-        }
-    }
-    d.stroke_styled(b.build(), color, StrokeStyle::round(width));
+/// Two decimals, the precision every price on the page shows.
+fn price_label(d: &Datum) -> String {
+    d.as_continuous()
+        .map(|v| format!("{v:.2}"))
+        .unwrap_or_default()
 }
 
-/// The area under a series, closed down to the baseline, as a path rather than a polygon so its
-/// top edge can follow the same spline the line does.
-fn area_path(pts: &[Point], baseline_y: f64, smooth: bool) -> Shape {
-    let mut b = PathBuilder::new();
-    if smooth {
-        b = b.smooth_polyline(pts, 0.65);
-    } else {
-        b = b.move_to(pts[0]);
-        for p in &pts[1..] {
-            b = b.line_to(*p);
-        }
-    }
-    b.line_to(Point::new(pts[pts.len() - 1].x, baseline_y))
-        .line_to(Point::new(pts[0].x, baseline_y))
-        .close()
-        .build()
+/// A whole-number percentage with its sign.
+fn percent_label(d: &Datum) -> String {
+    d.as_continuous()
+        .map(|v| format!("{v:.0}%"))
+        .unwrap_or_default()
 }
 
-/// The big price chart: gridlines with right-edge price labels, a gradient area fill under
-/// the price line, the line itself in trend color, a dashed reference line at the window's
-/// first close, first/last date labels, and a halo dot on the latest price.
-pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> impl Piece {
-    let range = crate::quotes::range();
-    canvas(move |d, size| {
+/// The big price chart: a gradient area under the price line in the trend color, a dashed
+/// reference at the window's first close, the moving-average overlays beneath the line, a halo dot
+/// on the latest price, dates along the bottom and price labels down the trailing edge.
+pub fn price_chart(quote: Signal<Load<Quote>>) -> impl Piece {
+    let overlay = quotes::overlay();
+    chart(move || {
         let Some(q) = quote.with(|l| l.ready().cloned()) else {
-            return;
+            return Vec::new();
         };
-        let dark = day::dark_mode();
-        let (_, days) = RANGES[range.get().min(RANGES.len() - 1)];
-        let closes = crate::quotes::tail(&q.closes, days);
-        if closes.len() < 2 || size.width < 40.0 {
-            return;
-        }
-        let dates = &q.dates[q.dates.len() - closes.len()..];
-        // Chart body inset: room for the price labels on the right and dates below.
-        let inset = Rect::new(0.0, 8.0, (size.width - 56.0).max(10.0), size.height - 34.0);
-        let (mut min, mut max) = closes
-            .iter()
-            .fold((f64::MAX, f64::MIN), |(lo, hi), c| (lo.min(*c), hi.max(*c)));
-        let pad = ((max - min) * 0.08).max(max * 0.002);
-        min -= pad;
-        max += pad;
-
-        // Horizontal gridlines on nice price steps, labeled at the right edge.
-        let step = nice_step((max - min) / 4.0);
-        let mut gy = (min / step).ceil() * step;
-        while gy < max {
-            let y = inset.origin.y + (1.0 - (gy - min) / (max - min)) * inset.size.height;
-            d.stroke(
-                Shape::Line(
-                    Point::new(inset.origin.x, y),
-                    Point::new(inset.origin.x + inset.size.width, y),
-                ),
-                grid_color(dark),
-                1.0,
-            );
-            d.text(
-                &format!("{gy:.2}"),
-                Point::new(inset.origin.x + inset.size.width + 6.0, y - 6.0),
-                day::prelude::TextStyle {
-                    size: 10.0,
-                    color: axis_text(dark),
-                    anchor: TextAnchor::LEADING,
-                    ..Default::default()
-                },
-            );
-            gy += step;
-        }
-
-        let pts = project(closes, min, max, inset);
+        let Some((closes, dates)) = window(&q, window_days()) else {
+            return Vec::new();
+        };
+        let (lo, _) = price_domain(closes);
         let first = closes[0];
-        let up = *closes.last().unwrap_or(&first) >= first;
-        let line = trend_color(up);
+        let last = closes[closes.len() - 1];
+        let line = trend_color(last >= first);
+        let price = || value("Series", "Price");
+        let mut marks: Vec<Mark> = Vec::with_capacity(closes.len() * 4 + 4);
 
-        // Gradient area under the line, clipped to the plot rect so a fat stroke or a rounded
-        // join can never bleed over the gridline labels.
-        d.save();
-        d.clip(Shape::Rect(inset));
-        d.fill(
-            area_path(&pts, inset.origin.y + inset.size.height, false),
-            LinearGradient::vertical(faded(line, 0.30), faded(line, 0.02)),
+        // The area fades from the line down to the bottom of the plot. Its lower edge is the
+        // pinned domain's floor rather than zero, because an area to zero would be one flat
+        // block at this scale.
+        for (c, d) in closes.iter().zip(dates) {
+            marks.push(
+                ch::area(date("Date", d), value("Price", *c))
+                    .y_range(value("Price", lo), value("Price", *c))
+                    .gradient(faded(line, 0.30), faded(line, 0.02)),
+            );
+        }
+        // Dashed reference at the window's first close.
+        marks.push(
+            ch::rule_y(value("Price", first))
+                .foreground(Color::rgba(0.5, 0.5, 0.5, 0.55))
+                .line_width(1.0)
+                .dash([5.0, 5.0]),
         );
-        d.restore();
-
-        // Dashed reference at the window's first close — one stroke with a dash pattern, where
-        // this used to emit a separate segment per dash.
-        let ref_y = inset.origin.y + (1.0 - (first - min) / (max - min)) * inset.size.height;
-        d.stroke_styled(
-            Shape::Line(
-                Point::new(inset.origin.x, ref_y),
-                Point::new(inset.origin.x + inset.size.width, ref_y),
-            ),
-            Color::rgba(0.5, 0.5, 0.5, 0.55),
-            StrokeStyle::dashed(1.0, vec![5.0, 5.0]),
-        );
-
-        // Moving-average overlays UNDER the price line, so the price always reads on top.
-        // Each is drawn only where it exists (an SMA has no value until it has N samples), and
-        // both are computed over the FULL history rather than the visible window — a 50-day
-        // average of a 22-day window would otherwise be a 22-day average wearing the wrong
-        // label. Hidden when the range is too short for even the fast average to appear.
-        if crate::quotes::overlay().get() {
+        // Moving-average overlays UNDER the price line, so the price always reads on top. Each
+        // starts where it exists (an SMA has no value until it has N samples), and both are
+        // computed over the FULL history rather than the visible window — a 50-day average of
+        // a 22-day window would otherwise be a 22-day average wearing the wrong label. A value
+        // outside the pinned domain is clipped by the chart rather than stretching it.
+        if overlay.get() {
             let from = q.closes.len() - closes.len();
-            for (period, color) in [(20usize, SMA20_COLOR), (50usize, SMA50_COLOR)] {
-                let series = crate::quotes::sma_series(&q.closes, period);
-                let mut run: Vec<Point> = Vec::new();
-                for (i, _) in closes.iter().enumerate() {
-                    match series[from + i] {
-                        Some(v) if v >= min && v <= max => {
-                            let fx = if closes.len() <= 1 {
-                                1.0
-                            } else {
-                                i as f64 / (closes.len() - 1) as f64
-                            };
-                            run.push(Point::new(
-                                inset.origin.x + fx * inset.size.width,
-                                inset.origin.y
-                                    + (1.0 - (v - min) / (max - min)) * inset.size.height,
-                            ));
-                        }
-                        // Off-scale or not yet defined: break the run so the line does not
-                        // leap across the gap.
-                        _ => {
-                            polyline(d, &run, color, 1.25, false);
-                            run.clear();
-                        }
+            for (period, name, color) in [
+                (20usize, "20-day", SMA20_COLOR),
+                (50usize, "50-day", SMA50_COLOR),
+            ] {
+                let series = quotes::sma_series(&q.closes, period);
+                for (i, d) in dates.iter().enumerate() {
+                    if let Some(v) = series[from + i] {
+                        marks.push(
+                            ch::line(date("Date", d), value("Price", v))
+                                .by_series(value("Series", name))
+                                .foreground(color)
+                                .line_width(1.25),
+                        );
                     }
                 }
-                polyline(d, &run, color, 1.25, false);
             }
         }
-
-        polyline(d, &pts, line, 2.0, false);
-
-        // Latest price: a soft halo + solid dot.
-        if let Some(p) = pts.last() {
-            d.fill(
-                Shape::Ellipse(Rect::new(p.x - 7.0, p.y - 7.0, 14.0, 14.0)),
-                faded(line, 0.25),
-            );
-            d.fill(
-                Shape::Ellipse(Rect::new(p.x - 3.5, p.y - 3.5, 7.0, 7.0)),
-                line,
+        // The price line itself, as its own series so it never joins an overlay's path.
+        for (c, d) in closes.iter().zip(dates) {
+            marks.push(
+                ch::line(date("Date", d), value("Price", *c))
+                    .by_series(price())
+                    .foreground(line)
+                    .line_width(2.0)
+                    .rounded(),
             );
         }
-
-        // First/last dates along the bottom edge.
-        let base = inset.origin.y + inset.size.height + 8.0;
-        if let (Some(a), Some(b)) = (dates.first(), dates.last()) {
-            d.text(
-                a,
-                Point::new(inset.origin.x, base),
-                day::prelude::TextStyle {
-                    size: 10.0,
-                    color: axis_text(dark),
-                    anchor: TextAnchor::LEADING,
-                    ..Default::default()
-                },
-            );
-            // No trailing anchor in the canvas text API — center the label just inside
-            // the right edge instead.
-            d.text(
-                b,
-                Point::new(inset.origin.x + inset.size.width - 30.0, base + 5.0),
-                day::prelude::TextStyle {
-                    size: 10.0,
-                    color: axis_text(dark),
-                    anchor: TextAnchor::CENTERED,
-                    ..Default::default()
-                },
-            );
-        }
+        // Latest price: a soft halo + solid dot. Symbol sizes are areas (πr²): a 7pt halo around
+        // a 3.5pt dot.
+        let end = dates[dates.len() - 1].as_str();
+        marks.push(
+            ch::point(date("Date", end), value("Price", last))
+                .foreground(faded(line, 0.25))
+                .symbol_size(154.0),
+        );
+        marks.push(
+            ch::point(date("Date", end), value("Price", last))
+                .foreground(line)
+                .symbol_size(38.5),
+        );
+        marks
     })
+    // The domain is a property of the chart, not of a mark, and it has to follow the range
+    // picker like the marks do: the closure is re-read inside the chart's own binding.
+    .y_domain_with(move || windowed_price_domain(quote))
+    .y_axis_trailing()
+    .y_format(price_label)
+    .x_tick_count(4)
+    .x_label("")
+    .y_label("")
+    .legend(LegendPosition::Hidden)
+    .plot_insets(STACKED_INSETS)
     .height(280.0)
     .grow_w()
 }
 
-/// The volume strip under the chart: one bar per day, trend-colored by that day's direction.
-pub fn volume_strip(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> impl Piece {
-    let range = crate::quotes::range();
-    canvas(move |d, size| {
-        let Some(q) = quote.with(|l| l.ready().cloned()) else {
-            return;
-        };
-        let (_, days) = RANGES[range.get().min(RANGES.len() - 1)];
-        let closes = crate::quotes::tail(&q.closes, days);
-        let volumes = crate::quotes::tail(&q.volumes, days);
-        if closes.len() < 2 || size.width < 40.0 {
-            return;
-        }
-        let w = (size.width - 56.0).max(10.0);
-        let peak = volumes.iter().cloned().fold(1.0, f64::max);
-        let bar_w = (w / volumes.len() as f64).max(1.0);
-        for (i, v) in volumes.iter().enumerate() {
-            let h = (v / peak) * (size.height - 4.0);
-            let up = i == 0 || closes[i] >= closes[i - 1];
-            d.fill(
-                Shape::Rect(Rect::new(
-                    i as f64 * bar_w,
-                    size.height - h,
-                    (bar_w - 1.0).max(0.75),
-                    h,
-                )),
-                faded(trend_color(up), 0.55),
-            );
-        }
+/// The padded extent of the closes in view, for a chart that pins its y axis to them.
+fn windowed_price_domain(quote: Signal<Load<Quote>>) -> Option<(f64, f64)> {
+    quote.with(|l| {
+        l.ready()
+            .and_then(|q| window(q, window_days()).map(|(c, _)| price_domain(c)))
     })
+}
+
+/// The first and last instants in view, for a strip that shares the price chart's time axis.
+fn windowed_date_domain(quote: Signal<Load<Quote>>) -> Option<(f64, f64)> {
+    quote.with(|l| {
+        l.ready().and_then(|q| {
+            let (_, dates) = window(q, window_days())?;
+            Some((
+                ch::parse_iso_date(&dates[0])?,
+                ch::parse_iso_date(&dates[dates.len() - 1])?,
+            ))
+        })
+    })
+}
+
+/// The volume strip under the chart: one bar per session on the same time axis as the price
+/// chart, trend-colored by that session's direction. The x domain is pinned to the chart's own
+/// so the two line up bar for bar; the bars at either end are cut in half by that pin, which is
+/// where the price line ends too.
+pub fn volume_strip(quote: Signal<Load<Quote>>) -> impl Piece {
+    chart(move || {
+        let Some(q) = quote.with(|l| l.ready().cloned()) else {
+            return Vec::new();
+        };
+        let Some((closes, dates)) = window(&q, window_days()) else {
+            return Vec::new();
+        };
+        let volumes = quotes::tail(&q.volumes, closes.len());
+        closes
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let up = i == 0 || *c >= closes[i - 1];
+                ch::bar(date("Date", &dates[i]), value("Volume", volumes[i]))
+                    .foreground(faded(trend_color(up), 0.55))
+            })
+            .collect()
+    })
+    .x_domain_with(move || windowed_date_domain(quote))
+    .bare()
+    .plot_insets(STRIP_INSETS)
     .height(56.0)
     .grow_w()
 }
 
-/// A watchlist-row sparkline: the last month as a tiny line + soft fill, trend-colored.
-pub fn sparkline(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> impl Piece {
-    canvas(move |d, size| {
+/// How far the price sits below its running peak, as an area in the loss color. The reading a
+/// price line hides: two symbols can end a year at the same gain and have spent it very
+/// differently on the way.
+pub fn drawdown_chart(quote: Signal<Load<Quote>>) -> impl Piece {
+    let red = trend_color(false);
+    chart(move || {
         let Some(q) = quote.with(|l| l.ready().cloned()) else {
-            return;
+            return Vec::new();
         };
-        let closes = crate::quotes::tail(&q.closes, 22);
-        if closes.len() < 2 {
-            return;
+        let Some((closes, dates)) = window(&q, window_days()) else {
+            return Vec::new();
+        };
+        let dd = quotes::drawdown_series(closes);
+        let mut marks: Vec<Mark> = Vec::with_capacity(closes.len() * 2);
+        for (v, d) in dd.iter().zip(dates) {
+            marks.push(
+                ch::area(date("Date", d), value("Drawdown", *v))
+                    .gradient(faded(red, 0.06), faded(red, 0.38)),
+            );
         }
-        let (min, max) = closes
-            .iter()
-            .fold((f64::MAX, f64::MIN), |(lo, hi), c| (lo.min(*c), hi.max(*c)));
-        let rect = Rect::new(0.0, 2.0, size.width, size.height - 4.0);
-        let pts = project(closes, min, max, rect);
-        // Colored by the DAY change, matching the row's chip (the Stocks convention),
-        // not by the sparkline window's own trend.
-        let line = trend_color(q.change() >= 0.0);
-        // A thumbnail, so the spline is decoration rather than data: clipped to its own box so
-        // the curve's overshoot at a spike cannot paint over the row beside it.
-        d.save();
-        d.clip(Shape::Rect(Rect::new(0.0, 0.0, size.width, size.height)));
-        d.fill(
-            area_path(&pts, size.height, true),
-            LinearGradient::vertical(faded(line, 0.25), faded(line, 0.0)),
-        );
-        polyline(d, &pts, line, 1.5, true);
-        d.restore();
+        for (v, d) in dd.iter().zip(dates) {
+            marks.push(
+                ch::line(date("Date", d), value("Drawdown", *v))
+                    .foreground(red)
+                    .line_width(1.5)
+                    .rounded(),
+            );
+        }
+        marks
     })
+    .y_axis_trailing()
+    .y_format(percent_label)
+    .x_tick_count(4)
+    .x_label("")
+    .y_label("")
+    .plot_insets(STACKED_INSETS)
+    .height(200.0)
+    .grow_w()
+}
+
+/// The distribution of one-session moves in the window: a histogram of daily returns, losses in
+/// red and gains in green, with a dashed rule at zero. Each bin is a rectangle spanning its own
+/// edges on a continuous axis, so the axis labels itself in round percentages rather than naming
+/// every bin.
+pub fn returns_histogram(quote: Signal<Load<Quote>>, axis_label: String) -> impl Piece {
+    chart(move || {
+        let Some(q) = quote.with(|l| l.ready().cloned()) else {
+            return Vec::new();
+        };
+        let Some((closes, _)) = window(&q, window_days()) else {
+            return Vec::new();
+        };
+        let hist = quotes::return_histogram(&quotes::daily_returns(closes), 9);
+        let mut marks: Vec<Mark> = Vec::with_capacity(hist.bins.len() + 1);
+        for (lo, count) in &hist.bins {
+            let hi = lo + hist.width;
+            marks.push(
+                ch::rect(value("Return", *lo), value("Sessions", *count as f64))
+                    .x_range(value("Return", *lo), value("Return", hi))
+                    .foreground(faded(trend_color(*lo >= 0.0), 0.85))
+                    .corner_radius(2.0)
+                    .width(ch::Dimension::Inset(1.0)),
+            );
+        }
+        marks.push(
+            ch::rule_x(value("Return", 0.0))
+                .foreground(Color::rgba(0.5, 0.5, 0.5, 0.7))
+                .line_width(1.0)
+                .dash([4.0, 4.0]),
+        );
+        marks
+    })
+    .x_format(|d| {
+        d.as_continuous()
+            .map(|v| {
+                // Zero is an edge, not a move; it takes no sign.
+                if v.abs() < 1e-9 {
+                    "0%".to_string()
+                } else {
+                    format!("{v:+.1}%")
+                }
+            })
+            .unwrap_or_default()
+    })
+    .x_label(axis_label)
+    .y_label("")
+    .y_tick_count(4)
+    .height(200.0)
+    .grow_w()
+}
+
+/// A calendar of monthly returns: months across, years down, each cell colored on the diverging
+/// ramp around zero and printed with its percentage. Two categorical axes, which is what a heat
+/// map is in the grammar.
+pub fn monthly_heat_map(quote: Signal<Load<Quote>>) -> impl Piece {
+    chart(move || {
+        let Some(q) = quote.with(|l| l.ready().cloned()) else {
+            return Vec::new();
+        };
+        let dark = day::dark_mode();
+        let months = quotes::monthly_returns(&q.closes, &q.dates);
+        // The ramp's reach: the biggest move either way, and never so small that a quiet year
+        // is painted in the deepest colors.
+        let reach = months
+            .iter()
+            .map(|(_, _, r)| r.abs())
+            .fold(1.0f64, f64::max);
+        months
+            .iter()
+            .map(|(year, month, r)| {
+                let t = 0.5 + r / (2.0 * reach);
+                // Light text on the saturated ends, the chart's own label color near neutral.
+                let ink = if (t - 0.5).abs() > 0.28 {
+                    Color::WHITE
+                } else if dark {
+                    Color::rgba(0.0, 0.0, 0.0, 0.8)
+                } else {
+                    Color::rgba(0.0, 0.0, 0.0, 0.75)
+                };
+                ch::rect(
+                    value("Month", quotes::MONTH_NAMES[(*month as usize - 1).min(11)]),
+                    value("Year", year.to_string()),
+                )
+                .foreground(ch::diverging(t))
+                .width(ch::Dimension::Inset(1.0))
+                .height(ch::Dimension::Inset(1.0))
+                .corner_radius(3.0)
+                .annotation(AnnotationPosition::Overlay, format!("{r:+.1}"))
+                .annotation_color(ink)
+            })
+            .collect()
+    })
+    .x_categories(quotes::MONTH_NAMES)
+    .no_grid()
+    .x_label("")
+    .y_label("")
+    .label_size(10.0)
+    .height(140.0)
+    .grow_w()
+}
+
+/// A watchlist-row sparkline: the last month as a tiny line + soft fill, trend-colored.
+pub fn sparkline(quote: Signal<Load<Quote>>) -> impl Piece {
+    chart(move || {
+        let Some(q) = quote.with(|l| l.ready().cloned()) else {
+            return Vec::new();
+        };
+        let closes = quotes::tail(&q.closes, 22);
+        if closes.len() < 2 {
+            return Vec::new();
+        }
+        let (lo, _) = price_domain(closes);
+        // Colored by the DAY change, matching the row's chip (the Stocks convention), not by
+        // the sparkline window's own trend.
+        let line = trend_color(q.change() >= 0.0);
+        let mut marks: Vec<Mark> = Vec::with_capacity(closes.len() * 2);
+        // A thumbnail, so the spline is decoration rather than data. The domain is pinned, which
+        // clips the curve's overshoot at a spike to the plot instead of painting the row beside.
+        for (i, c) in closes.iter().enumerate() {
+            marks.push(
+                ch::area(value("Day", i as f64), value("Price", *c))
+                    .y_range(value("Price", lo), value("Price", *c))
+                    .interpolation(Interpolation::CatmullRom)
+                    .gradient(faded(line, 0.25), faded(line, 0.0)),
+            );
+        }
+        for (i, c) in closes.iter().enumerate() {
+            marks.push(
+                ch::line(value("Day", i as f64), value("Price", *c))
+                    .interpolation(Interpolation::CatmullRom)
+                    .foreground(line)
+                    .line_width(1.5)
+                    .rounded(),
+            );
+        }
+        marks
+    })
+    .y_domain_with(move || {
+        quote.with(|l| {
+            l.ready().and_then(|q| {
+                let closes = quotes::tail(&q.closes, 22);
+                (closes.len() >= 2).then(|| price_domain(closes))
+            })
+        })
+    })
+    .bare()
+    .plot_insets(Insets::uniform(1.0))
     .frame(84.0, 30.0)
+}
+
+/// Every tracked symbol over the shared range, each indexed to 100 at the window's first close,
+/// so a 3,000-dollar future and a one-dollar currency pair share one axis and the eye reads
+/// relative performance straight off the lines. One series per symbol on the crate's own
+/// colorblind-safe palette, named in the legend.
+pub fn performance_chart(list: Signal<Vec<String>>) -> impl Piece {
+    chart(move || {
+        let days = window_days();
+        let mut marks: Vec<Mark> = Vec::new();
+        for symbol in list.get() {
+            let quote = quotes::resource_for(&symbol).signal();
+            let Some(q) = quote.with(|l| l.ready().cloned()) else {
+                continue;
+            };
+            let Some((closes, dates)) = window(&q, days) else {
+                continue;
+            };
+            let first = closes[0];
+            if first <= 0.0 {
+                continue;
+            }
+            for (c, d) in closes.iter().zip(dates) {
+                marks.push(
+                    ch::line(date("Date", d), value("Indexed", c / first * 100.0))
+                        .by_series(value("Symbol", symbol.clone()))
+                        .line_width(1.5)
+                        .rounded(),
+                );
+            }
+        }
+        if !marks.is_empty() {
+            marks.push(
+                ch::rule_y(value("Indexed", 100.0))
+                    .foreground(Color::rgba(0.5, 0.5, 0.5, 0.55))
+                    .line_width(1.0)
+                    .dash([5.0, 5.0]),
+            );
+        }
+        marks
+    })
+    .y_axis_trailing()
+    .y_format(|d| {
+        d.as_continuous()
+            .map(|v| format!("{v:.0}"))
+            .unwrap_or_default()
+    })
+    .x_tick_count(4)
+    .x_label("")
+    .y_label("")
+    .legend(LegendPosition::Bottom)
+    .height(240.0)
+    .grow_w()
+}
+
+/// Today's breadth as a ring: advancing symbols in green, declining in red. A stacked bar in
+/// polar coordinates, which is what a donut is.
+pub fn breadth_donut(list: Signal<Vec<String>>) -> impl Piece {
+    chart(move || {
+        let Some(b) = quotes::breadth(&list.get()) else {
+            return Vec::new();
+        };
+        vec![
+            ch::sector(value("Symbols", b.up as f64))
+                .by_series(value("Direction", "Advancing"))
+                .foreground(trend_color(true))
+                .angular_inset(1.5),
+            ch::sector(value("Symbols", b.down as f64))
+                .by_series(value("Direction", "Declining"))
+                .foreground(trend_color(false))
+                .angular_inset(1.5),
+        ]
+    })
+    .coordinate(Coordinate::donut(0.6))
+    .bare()
+    .frame(44.0, 44.0)
 }
 
 /// A low → high band with the current price marked on it: the reading a stats cell cannot give,
@@ -364,52 +533,50 @@ pub fn sparkline(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> im
 /// 52-week range on the detail page.
 ///
 /// The TRACK only — the endpoint numbers are real labels beside it (see `detail::range_row`),
-/// because canvas text carries neither the reader's font scale nor RTL mirroring. Drawn as a
-/// canvas because the marker's position is a fraction of the track's measured width, which only
-/// the draw pass knows.
+/// because canvas text carries neither the reader's font scale nor RTL mirroring. Two rounded
+/// rules on one x axis whose domain is the band itself, and a two-mark dot where the price is.
 pub fn range_bar(
-    quote: Signal<day::reactive::Load<crate::quotes::Quote>>,
-    lo: impl Fn(&crate::quotes::Quote) -> f64 + 'static,
-    hi: impl Fn(&crate::quotes::Quote) -> f64 + 'static,
+    quote: Signal<Load<Quote>>,
+    lo: impl Fn(&Quote) -> f64 + 'static,
+    hi: impl Fn(&Quote) -> f64 + 'static,
 ) -> impl Piece {
-    canvas(move |d, size| {
+    chart(move || {
         let Some(q) = quote.with(|l| l.ready().cloned()) else {
-            return;
+            return Vec::new();
         };
         let dark = day::dark_mode();
         let (lo_v, hi_v) = (lo(&q), hi(&q));
-        let track_h = 5.0;
-        let y = 9.0;
-        let w = size.width;
-        if w < 40.0 {
-            return;
-        }
-        // The track: a full-width capsule in a neutral fill, so the marker reads as the
-        // information and the band as the backdrop.
-        d.fill(
-            Shape::RoundedRect(Rect::new(0.0, y, w, track_h), track_h / 2.0),
-            grid_color(dark),
-        );
-        // The filled portion, in the day's trend color, from the low up to the price.
-        let t = q.position_in(lo_v, hi_v);
+        let at = lo_v + q.position_in(lo_v, hi_v) * (hi_v - lo_v);
         let line = trend_color(q.change() >= 0.0);
-        d.fill(
-            Shape::RoundedRect(
-                Rect::new(0.0, y, (w * t).max(track_h), track_h),
-                track_h / 2.0,
-            ),
-            faded(line, 0.55),
-        );
-        // The marker, clamped inside the track so it never half-hangs off either end.
-        let cx = (w * t).clamp(5.0, w - 5.0);
-        d.fill(
-            Shape::Ellipse(Rect::new(cx - 6.0, y + track_h / 2.0 - 6.0, 12.0, 12.0)),
-            faded(line, 0.22),
-        );
-        d.fill(
-            Shape::Ellipse(Rect::new(cx - 3.5, y + track_h / 2.0 - 3.5, 7.0, 7.0)),
-            line,
-        );
+        let level = || value("Level", 0.0);
+        vec![
+            // The track: the whole band in a neutral fill, so the marker reads as the
+            // information and the band as the backdrop.
+            ch::rule_y(level())
+                .x_range(value("Price", lo_v), value("Price", hi_v))
+                .foreground(grid_color(dark))
+                .line_width(5.0)
+                .rounded(),
+            // The filled portion, in the day's trend color, from the low up to the price.
+            ch::rule_y(level())
+                .x_range(value("Price", lo_v), value("Price", at))
+                .foreground(faded(line, 0.55))
+                .line_width(5.0)
+                .rounded(),
+            ch::point(value("Price", at), level())
+                .foreground(faded(line, 0.22))
+                .symbol_size(113.0),
+            ch::point(value("Price", at), level())
+                .foreground(line)
+                .symbol_size(38.5),
+        ]
+    })
+    .bare()
+    .plot_insets(Insets {
+        top: 0.0,
+        leading: 6.0,
+        bottom: 0.0,
+        trailing: 6.0,
     })
     .height(20.0)
     .grow_w()

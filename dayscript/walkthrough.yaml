@@ -21,7 +21,16 @@ flow:
   - assert_text: { id: breadth-down, text: "4" }
   - assert_text: { id: breadth-best, text: "SPY" }
   - assert_text: { id: breadth-worst, text: "GC=F" }
+  # The breadth donut and the performance chart are canvases: nothing to read, so their presence
+  # is asserted and the screenshots carry the drawing. The performance card's range picker is the
+  # window's shared range — the same signal the detail page's picker binds.
+  - assert_visible: { id: breadth-donut }
+  - assert_visible: { id: performance-chart }
   - screenshot: watchlist
+  - select: { id: wl-range-picker, index: 0 }
+  - assert_value: { id: wl-range-picker, value: 0 }
+  - screenshot: watchlist-1m
+  - select: { id: wl-range-picker, index: 3 }
 
   # The chip-mode control re-reads EVERY chip at once: both → percent → absolute → both.
   # Cycled a full lap so the persisted setting ends where it started and a rerun sees the
@@ -86,6 +95,22 @@ flow:
   - screenshot: detail-no-overlay
   - toggle: { id: overlay-toggle, value: true }
   - assert_visible: { id: overlay-legend }
+  # The analysis panel: drawdown by default, then the daily-move histogram and the monthly
+  # heat map. Each is its own chart, swapped in by the picker.
+  - assert_visible: { id: analysis-drawdown }
+  - scroll_to: { id: analysis-drawdown }
+  - screenshot: detail-drawdown
+  - select: { id: analysis-picker, index: 1 }
+  - assert_visible: { id: analysis-returns }
+  - scroll_to: { id: analysis-returns }
+  - screenshot: detail-returns
+  - select: { id: analysis-picker, index: 2 }
+  - assert_visible: { id: analysis-monthly }
+  - scroll_to: { id: analysis-monthly }
+  - screenshot: detail-monthly
+  - select: { id: analysis-picker, index: 0 }
+  - assert_visible: { id: analysis-drawdown }
+
 
   # Leave the watchlist tab at its ROOT before switching tabs. Each tab owns its own push stack,
   # so a detail page left on this one stays in the tree — and `detail-symbol` below would then

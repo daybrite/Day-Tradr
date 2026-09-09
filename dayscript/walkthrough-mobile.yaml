@@ -5,7 +5,7 @@
 # WHY A SECOND SCRIPT: the app builds one of two shells from `day::size_class()` (src/lib.rs),
 # and the two do not share a route namespace. The sidebar owns a symbol at the top level
 # (`MSFT`); the phone pushes it onto the owning tab's stack, so its route nests under the tab
-# (reported as `MSFT/watchlist`). `assert_route` is an exact match, so one script cannot state
+# (reported as `watchlist/MSFT`). `assert_route` is an exact match, so one script cannot state
 # both. Pinning
 # the class with `size_class:` does not help on a device: the platform re-reports its real class
 # on the next trait pass and the shell flips back mid-run.
@@ -23,6 +23,8 @@ flow:
   - assert_text: { id: "wl-price-GC=F", text: "3203.55" }
   - assert_text: { id: breadth-up, text: "2" }
   - assert_text: { id: breadth-down, text: "4" }
+  - assert_visible: { id: breadth-donut }
+  - assert_visible: { id: performance-chart }
   - screenshot: m-watchlist
 
   # The chip-mode control re-reads every chip at once; a full lap leaves the persisted setting
@@ -34,20 +36,21 @@ flow:
   - tap: { id: chip-mode }
   - assert_text: { id: wl-chg-AAPL, text: "−0.45 (0.20%)" }
 
-  # A row opens the symbol INSIDE the Watchlist tab's own stack, so the route NESTS with the tab
-  # key rather than replacing it. This is the difference from the sidebar shell.
-  #
-  # Note the ORDER: day composes the route from its surfaces in registration order, and a nested
-  # surface registers before the one that contains it, so the stack's segment comes FIRST. That
-  # is the reverse of the order `navigate:` expects for an absolute path, so a route read back
-  # from the app cannot be fed to `navigate:` while both shells nest (day/crates/day-core, nav).
+  # A row opens the symbol INSIDE the Watchlist tab's own stack, so the route NESTS under the
+  # tab key rather than replacing it. This is the difference from the sidebar shell: the tab's
+  # segment comes first, then the page its stack holds.
   - tap: { id: wl-row-MSFT }
   - wait_for: { id: detail-price }
-  - assert_route: { route: MSFT/watchlist }
+  - assert_route: { route: watchlist/MSFT }
   - assert_text: { id: detail-price, text: "514.52" }
   - assert_text: { id: detail-name, text: "Microsoft Corp." }
   - assert_visible: { id: overlay-legend }
   - screenshot: m-detail
+  - select: { id: analysis-picker, index: 2 }
+  - assert_visible: { id: analysis-monthly }
+  - scroll_to: { id: analysis-monthly }
+  - screenshot: m-detail-monthly
+  - select: { id: analysis-picker, index: 0 }
   # Back returns to this tab's own root.
   - nav_back: {}
   - wait_for: { id: watchlist-title }
@@ -66,7 +69,7 @@ flow:
   # recycling list, and an unrealized row has no element for a tap to find (docs/list.md).
   - tap: { id: sym-row-AAPL }
   - wait_for: { id: detail-price }
-  - assert_route: { route: AAPL/manage }
+  - assert_route: { route: manage/AAPL }
   - assert_text: { id: detail-symbol, text: "AAPL" }
   - nav_back: {}
   - wait_for: { id: sym-field }
@@ -93,12 +96,12 @@ flow:
   - navigate: { route: watchlist }
   - tap: { id: wl-row-AAPL }
   - wait_for: { id: detail-price }
-  - assert_route: { route: AAPL/watchlist }
+  - assert_route: { route: watchlist/AAPL }
   - navigate: { route: settings }
   - wait_for: { id: language-picker }
   - navigate: { route: watchlist }
   - wait_for: { id: detail-price }
-  - assert_route: { route: AAPL/watchlist }
+  - assert_route: { route: watchlist/AAPL }
   - assert_text: { id: detail-price, text: "230.04" }
   - nav_back: {}
   - wait_for: { id: watchlist-title }

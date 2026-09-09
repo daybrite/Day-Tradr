@@ -218,6 +218,125 @@ pub fn tail(v: &[f64], n: usize) -> &[f64] {
     &v[v.len().saturating_sub(n)..]
 }
 
+/// Short month names, in calendar order — the columns of the monthly heat map and the labels
+/// every chart's time axis already uses. Proper nouns by convention on a finance chart, so not
+/// localized.
+pub const MONTH_NAMES: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/// How far each close sits below the running peak, in percent (zero at a new high, negative
+/// everywhere else), index-aligned with `closes`.
+pub fn drawdown_series(closes: &[f64]) -> Vec<f64> {
+    let mut peak = f64::MIN;
+    closes
+        .iter()
+        .map(|c| {
+            peak = peak.max(*c);
+            if peak > 0.0 {
+                (c / peak - 1.0) * 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect()
+}
+
+/// One-session moves in percent: `closes.len() - 1` values, the first session having nothing
+/// to move from.
+pub fn daily_returns(closes: &[f64]) -> Vec<f64> {
+    closes
+        .windows(2)
+        .map(|w| {
+            if w[0] > 0.0 {
+                (w[1] / w[0] - 1.0) * 100.0
+            } else {
+                0.0
+            }
+        })
+        .collect()
+}
+
+/// A histogram over a symmetric range around zero: every bin is `width` wide, edges fall on
+/// multiples of the width so zero is always an edge, and `bins` holds each bin's lower edge with
+/// its count, in order.
+pub struct Histogram {
+    pub width: f64,
+    pub bins: Vec<(f64, usize)>,
+}
+
+/// Bin `values` into about `target` bins. The width is a round 1/2/5×10ⁿ step chosen so the
+/// largest move either way still lands in a bin, which keeps the axis labels round too.
+pub fn return_histogram(values: &[f64], target: usize) -> Histogram {
+    let reach = values
+        .iter()
+        .map(|v| v.abs())
+        .fold(0.0f64, f64::max)
+        .max(0.1);
+    let width = nice_step(2.0 * reach / target.max(2) as f64);
+    let half = (reach / width).ceil() as i64;
+    let mut bins: Vec<(f64, usize)> = (-half..half).map(|i| (i as f64 * width, 0)).collect();
+    for v in values {
+        let i = ((v / width).floor() as i64 + half).clamp(0, bins.len() as i64 - 1) as usize;
+        bins[i].1 += 1;
+    }
+    Histogram { width, bins }
+}
+
+/// Round a raw interval up to a "nice" 1/2/5×10ⁿ step.
+fn nice_step(raw: f64) -> f64 {
+    if raw <= 0.0 {
+        return 1.0;
+    }
+    let mag = 10f64.powf(raw.log10().floor());
+    let norm = raw / mag;
+    let n = if norm <= 1.0 {
+        1.0
+    } else if norm <= 2.0 {
+        2.0
+    } else if norm <= 5.0 {
+        5.0
+    } else {
+        10.0
+    };
+    n * mag
+}
+
+/// Each calendar month's return in percent, as `(year, month, percent)`, oldest first: the
+/// month's last close against the previous month's last close. The first month on record has no
+/// previous close and is left out rather than reported as a partial move from its own first
+/// session.
+pub fn monthly_returns(closes: &[f64], dates: &[String]) -> Vec<(i64, u32, f64)> {
+    let ym = |d: &str| -> Option<(i64, u32)> {
+        let mut it = d.split('-');
+        let y = it.next()?.parse().ok()?;
+        let m = it.next()?.parse().ok()?;
+        Some((y, m))
+    };
+    // The last close of every month, in order.
+    let mut months: Vec<((i64, u32), f64)> = Vec::new();
+    for (c, d) in closes.iter().zip(dates) {
+        let Some(key) = ym(d) else { continue };
+        match months.last_mut() {
+            Some((k, last)) if *k == key => *last = *c,
+            _ => months.push((key, *c)),
+        }
+    }
+    months
+        .windows(2)
+        .map(|w| {
+            let ((y, m), close) = w[1];
+            let prev = w[0].1;
+            let pct = if prev > 0.0 {
+                (close / prev - 1.0) * 100.0
+            } else {
+                0.0
+            };
+            (y, m, pct)
+        })
+        .collect()
+}
+
 /// A fetch/parse failure, displayable (`Error + Send + Sync` so it rides `Load::Failed`).
 #[derive(Debug)]
 pub struct QuoteError(pub String);
@@ -578,10 +697,13 @@ pub fn reload_all() {
 // Per-symbol Resources, memoized by symbol (the Day-Skies STATES pattern).
 // ---------------------------------------------------------------------------
 
+/// One symbol's memoized fetch.
+type QuoteEntry = (String, day::reactive::Resource<Quote>);
+
 /// Per-symbol quote Resources, memoized by symbol. APP-wide (docs/state.md): a fetch CACHE over
 /// shared data, so two windows watching the same symbol read one load.
 #[derive(Clone)]
-struct Quotes(Rc<RefCell<Vec<(String, day::reactive::Resource<Quote>)>>>);
+struct Quotes(Rc<RefCell<Vec<QuoteEntry>>>);
 
 impl Ambient for Quotes {
     fn create() -> Self {
@@ -703,20 +825,15 @@ pub fn mock(symbol: &str) -> Quote {
     }
 }
 
-/// A synthetic ISO date for mock row `i` of `days`: counts back from a fixed anchor so runs
-/// are identical regardless of the wall clock (2026-07-01 is the newest mock day).
+/// A synthetic ISO date for mock row `i` of `days`: counts back one calendar day per row from a
+/// fixed anchor, so runs are identical regardless of the wall clock (2026-07-01 is the newest
+/// mock day). Real calendar days, because the charts put these on a time axis: a flat 30-day
+/// month would hand the axis a February 30th that sorts after March 1st.
 fn mock_date(i: usize, days: usize) -> String {
-    // Days-to-civil is overkill for fixture labels: a flat 30-day month is fine for display.
-    let back = days - 1 - i;
-    let months_back = back / 30;
-    let day_in_month = 30 - (back % 30);
-    let (mut y, mut m) = (2026i64, 7i64);
-    m -= months_back as i64;
-    while m < 1 {
-        m += 12;
-        y -= 1;
-    }
-    format!("{y:04}-{m:02}-{day_in_month:02}")
+    use day_piece_charts::ticks::civil;
+    let back = (days - 1 - i) as i64;
+    let (y, m, d) = civil::from_days(civil::to_days(2026, 7, 1) - back);
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 // ---------------------------------------------------------------------------

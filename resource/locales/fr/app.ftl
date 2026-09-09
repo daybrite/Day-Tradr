@@ -90,3 +90,11 @@ settings_proxy_hint = Les requêtes de cours passent par là. Utilisez %u à l'e
 settings_proxy_apply = Appliquer
 settings_proxy_relay = Utiliser le relais Daybrite
 settings_proxy_direct = Interroger directement
+
+# Le panneau d’analyse sous le graphique, et la carte de performance de la liste
+analysis_label = Analyse
+analysis_drawdown = Repli
+analysis_returns = Variations quotidiennes
+analysis_monthly = Mensuel
+axis_return = Variation sur une séance
+performance_title = Performance, base 100

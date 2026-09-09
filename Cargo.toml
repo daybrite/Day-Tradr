@@ -40,6 +40,10 @@ day = { git = "https://github.com/daybrite/day.git" }
 day-part-prefs = { git = "https://github.com/daybrite/day.git" }
 day-piece-settings = { git = "https://github.com/daybrite/day.git" }
 day-part-http = { git = "https://github.com/daybrite/day.git" }
+# Every chart on every page: the price chart and its overlays, the volume strip, the analysis
+# panel, the sparklines, the performance comparison and the range tracks are compositions of the
+# grammar this crate draws on the canvas. Bare URL, no ref, like the day crates above.
+day-piece-charts = { git = "https://github.com/daybrite/day-piece-charts.git" }
 # The quote endpoint answers JSON (Yahoo retired the CSV download in 2024 — see src/quotes.rs),
 # so the data layer needs a parser. Same crate Day-Skies uses for its forecast API.
 serde_json = "1"

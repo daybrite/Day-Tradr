@@ -25,10 +25,12 @@ missing. The launch prints where it put the checkout, so you can open the code a
 
 ## What you get
 
-The list opens on a summary of the day: how many of your symbols are up, how many are down, and
-the best and worst movers by name. Every symbol gets a card with a sparkline of recent movement,
-the price, and a change chip. Tap the chip to cycle it between the change, the percentage, or
-both, and sort the list by your own order, by name, or by today's move.
+The list opens on a summary of the day: how many of your symbols are up, how many are down, drawn
+as a ring, and the best and worst movers by name. Below it, every symbol's move over the chosen
+range on one chart, each indexed to 100 at the start, so a gold future and a currency pair read
+against each other on one axis. Every symbol gets a card with a sparkline of recent movement, the
+price, and a change chip. Tap the chip to cycle it between the change, the percentage, or both,
+and sort the list by your own order, by name, or by today's move.
 
 <p align="center">
   <kbd><img src="https://daybrite.github.io/Day-Tradr/gallery/macos-appkit/en/detail.png" width="720" alt="A symbol's detail on macOS, with the watchlist in the sidebar"></kbd>
@@ -37,7 +39,13 @@ both, and sort the list by your own order, by name, or by today's move.
 Tap a symbol for the full picture: a price chart with 20-day and 50-day moving averages you can
 switch off, a volume strip beneath it, and range bars that show where the price sits inside
 today's high and low and inside the year's. Five ranges run from a month to everything the
-source has.
+source has. An analysis panel gives three more readings of the same history: how far the price
+sits below its peak, how its one-session moves are distributed, and a calendar of monthly returns
+colored around zero.
+
+Every chart is a composition from [day-piece-charts](https://github.com/daybrite/day-piece-charts),
+a grammar-of-graphics piece that draws on Day's canvas, so the same chart code renders on all
+seven platforms.
 
 - Stocks, ETFs, commodity futures, and currency pairs, added by ticker or picked from suggestions.
 - Reorder the watchlist by dragging and remove a symbol by swiping its row away.
@@ -113,8 +121,10 @@ day patch --local /path/to/day
   Preferences window that becomes a fullscreen cover on mobile.
 - `src/quotes.rs` is the data layer: the persisted watchlist, the Yahoo Finance fetch, and one
   memoized reactive [`Resource`](https://daybrite.dev/docs/internal/async) per symbol.
-- `src/charts.rs` draws every canvas: the price chart with its overlays, the volume strip, the
-  sparklines, and the range bars ([shapes](https://daybrite.dev/docs/internal/shapes)).
+- `src/charts.rs` composes every chart from
+  [day-piece-charts](https://github.com/daybrite/day-piece-charts): the price chart with its
+  overlays, the volume strip, the drawdown, histogram and monthly heat map, the sparklines, the
+  performance comparison, the breadth ring, and the range tracks.
 - `src/pages/watchlist.rs`, `detail.rs`, and `manage.rs` are the three screens.
 - `resource/locales/` carries the Fluent strings for `en`, `fr`, `ar`, and `zh-CN`.
 - `platform/` holds the thin native host projects the mobile targets build through.
