@@ -109,7 +109,7 @@ day patch --local /path/to/day
 
 ## Inside the code
 
-- `src/lib.rs` is `root()`: a sidebar `selector` with one row per tracked symbol, plus a
+- `src/lib.rs` is `root()`: a sidebar `nav` with one row per tracked symbol, plus a
   Preferences window that becomes a fullscreen cover on mobile.
 - `src/quotes.rs` is the data layer: the persisted watchlist, the Yahoo Finance fetch, and one
   memoized reactive [`Resource`](https://daybrite.dev/docs/internal/async) per symbol.

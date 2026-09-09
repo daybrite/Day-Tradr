@@ -74,7 +74,7 @@ pub fn manage_page() -> impl Piece {
             .spacing(8.0)
             .padding(Insets::symmetric(4.0, 0.0))
             // Open the symbol. Inside the Symbols tab this pushes onto that tab's own stack;
-            // in the desktop sidebar it selects the row (the enclosing selector owns the route).
+            // in the desktop sidebar it selects the row (the enclosing nav owns the route).
             .on_tap(move || {
                 crate::open_symbol(&slot.key());
             })

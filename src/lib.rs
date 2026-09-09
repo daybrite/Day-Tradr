@@ -1,5 +1,5 @@
 //! Day Tradr — a stock & commodity quotes app built with [Day](https://daybrite.dev), modeled
-//! on Apple Stocks. `root()` is the whole UI, shared by every platform: a sidebar selector
+//! on Apple Stocks. `root()` is the whole UI, shared by every platform: a sidebar nav
 //! whose symbol rows derive reactively from the persisted watchlist (`quotes.rs`), a rich
 //! watchlist overview, a canvas-drawn detail chart per instrument, and manage/settings pages.
 
@@ -121,8 +121,8 @@ fn window_shell() -> impl Piece {
 /// onto the owning tab's stack and its route nests under the tab (`watchlist/MSFT`). Use
 /// [`open_symbol`] rather than `navigate` to reach a symbol from a page that serves both.
 fn tabbed_shell() -> impl Piece {
-    selector(tab())
-        .style(SelectorStyle::Tabs)
+    nav(tab())
+        .style(NavStyle::Tabs)
         .item_icon(
             "watchlist".to_string(),
             res::str::nav_watchlist(),
@@ -225,7 +225,7 @@ pub fn open_symbol(symbol: &str) {
 /// `navigate(symbol)` (pages/watchlist.rs), which needs a surface willing to accept the symbol as
 /// a route; with the page mounted bare in the tab there was none, so tapping a row did nothing.
 fn watchlist_stack() -> impl Piece {
-    stack(watchlist_path(), pages::watchlist_page())
+    nav_stack(watchlist_path(), pages::watchlist_page())
         .title(res::str::nav_watchlist())
         .destination(|key: &String| symbol_page(key))
         .id("watchlist-stack")
@@ -234,7 +234,7 @@ fn watchlist_stack() -> impl Piece {
 /// The Symbols tab: the editable list as the stack's root, each row pushing that symbol's
 /// detail page, and a `+` in the navigation bar for adding one.
 fn symbols_stack() -> impl Piece {
-    stack(symbols_path(), pages::manage_page())
+    nav_stack(symbols_path(), pages::manage_page())
         .title(res::str::nav_symbols())
         // Adding acts on the LIST this stack's root shows, so it rides the root page's chrome
         // (docs/toolbars.md) and is gone from the symbol pages pushed over it.
@@ -252,8 +252,8 @@ fn symbols_stack() -> impl Piece {
 fn sidebar_shell() -> impl Piece {
     let list = quotes::symbols();
     let section: Signal<Option<String>> = Signal::new(Some("watchlist".into()));
-    selector(section)
-        .style(SelectorStyle::Sidebar)
+    nav(section)
+        .style(NavStyle::Sidebar)
         .title(res::str::app_title())
         .header(sidebar_header)
         .item(
