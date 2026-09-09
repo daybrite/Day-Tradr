@@ -178,7 +178,7 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
                 day::prelude::TextStyle {
                     size: 10.0,
                     color: axis_text(dark),
-                    anchor: TextAnchor::Leading,
+                    anchor: TextAnchor::LEADING,
                     ..Default::default()
                 },
             );
@@ -271,7 +271,7 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
                 day::prelude::TextStyle {
                     size: 10.0,
                     color: axis_text(dark),
-                    anchor: TextAnchor::Leading,
+                    anchor: TextAnchor::LEADING,
                     ..Default::default()
                 },
             );
@@ -283,7 +283,7 @@ pub fn price_chart(quote: Signal<day::reactive::Load<crate::quotes::Quote>>) -> 
                 day::prelude::TextStyle {
                     size: 10.0,
                     color: axis_text(dark),
-                    anchor: TextAnchor::Centered,
+                    anchor: TextAnchor::CENTERED,
                     ..Default::default()
                 },
             );
