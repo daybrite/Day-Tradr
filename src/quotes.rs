@@ -306,6 +306,90 @@ fn nice_step(raw: f64) -> f64 {
 /// month's last close against the previous month's last close. The first month on record has no
 /// previous close and is left out rather than reported as a partial move from its own first
 /// session.
+/// Annualized return and volatility from a window of closes, both as PERCENTAGES.
+///
+/// Volatility is the standard deviation of DAILY returns scaled by √252 — the trading-day count a
+/// year has, which is the convention every risk figure in finance is quoted in, so a number here
+/// is comparable to one quoted anywhere else. Return is the total over the window annualized the
+/// same way. `None` for a window too short to say anything about.
+///
+/// Note the units: [`daily_returns`] is ALREADY in percent, so the deviation needs no scaling of
+/// its own — only the total return, which comes from raw closes, does. Scaling both put the
+/// volatility axis in the thousands of percent.
+pub fn risk_return(closes: &[f64]) -> Option<(f64, f64)> {
+    let r = daily_returns(closes);
+    if r.len() < 2 || closes.first().is_none_or(|f| *f <= 0.0) {
+        return None;
+    }
+    let n = r.len() as f64;
+    let mean = r.iter().sum::<f64>() / n;
+    // The sample variance (n-1): these returns are a sample of the process, not the population.
+    let var = r.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0);
+    let vol = var.sqrt() * 252.0_f64.sqrt();
+    let total = closes.last()? / closes.first()? - 1.0;
+    let years = n / 252.0;
+    // Geometric annualization, so a two-year 21% is 10% a year rather than 10.5%.
+    let annual = if years > 0.0 {
+        ((1.0 + total).powf(1.0 / years) - 1.0) * 100.0
+    } else {
+        0.0
+    };
+    Some((annual, vol))
+}
+
+/// Pearson correlation of two return series, over the overlap from their ENDS.
+///
+/// From the ends because two symbols rarely have the same history length — a newer listing has
+/// fewer days — and the days they share are the recent ones. `None` when they share too few, or
+/// when either has no variance at all (a flat series correlates with nothing).
+pub fn correlation(a: &[f64], b: &[f64]) -> Option<f64> {
+    let n = a.len().min(b.len());
+    if n < 3 {
+        return None;
+    }
+    let (a, b) = (&a[a.len() - n..], &b[b.len() - n..]);
+    let nf = n as f64;
+    let (ma, mb) = (a.iter().sum::<f64>() / nf, b.iter().sum::<f64>() / nf);
+    let mut cov = 0.0;
+    let (mut va, mut vb) = (0.0, 0.0);
+    for i in 0..n {
+        let (da, db) = (a[i] - ma, b[i] - mb);
+        cov += da * db;
+        va += da * da;
+        vb += db * db;
+    }
+    let denom = (va * vb).sqrt();
+    (denom > 0.0).then(|| (cov / denom).clamp(-1.0, 1.0))
+}
+
+/// Volume traded in each price band over a window — the "volume profile" a trader reads to find
+/// where a symbol actually changed hands.
+///
+/// Each day's whole volume is attributed to the band its CLOSE falls in. That is the honest
+/// approximation available from daily closes: the true profile needs intraday prints, which this
+/// app's data does not carry, and spreading a day's volume across a fabricated range would invent
+/// trades that never happened. Returns `(band_low, band_high, volume)`, low to high.
+pub fn volume_by_price(closes: &[f64], volumes: &[f64], bands: usize) -> Vec<(f64, f64, f64)> {
+    let bands = bands.max(1);
+    let (lo, hi) = closes
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(l, h), c| (l.min(*c), h.max(*c)));
+    if !lo.is_finite() || !hi.is_finite() || hi <= lo {
+        return Vec::new();
+    }
+    let step = (hi - lo) / bands as f64;
+    let mut out: Vec<(f64, f64, f64)> = (0..bands)
+        .map(|i| (lo + step * i as f64, lo + step * (i + 1) as f64, 0.0))
+        .collect();
+    for (i, c) in closes.iter().enumerate() {
+        // The top band is closed at its upper end, so the highest close lands in it rather than
+        // in a band past the end.
+        let b = (((c - lo) / step) as usize).min(bands - 1);
+        out[b].2 += volumes.get(i).copied().unwrap_or(0.0);
+    }
+    out
+}
+
 pub fn monthly_returns(closes: &[f64], dates: &[String]) -> Vec<(i64, u32, f64)> {
     let ym = |d: &str| -> Option<(i64, u32)> {
         let mut it = d.split('-');

@@ -98,3 +98,11 @@ analysis_returns = 每日涨跌
 analysis_monthly = 月度
 axis_return = 单日涨跌幅
 performance_title = 表现（起点 = 100）
+
+# New interactive charts (day-piece-charts README "Selection").
+analysis_profile = 成交量分布
+wl_risk_title = 风险与回报
+wl_corr_title = 相关性
+wl_risk_none = 悬停或点按某个代码
+wl_corr_none = 悬停或点按某个单元格
+wl_risk_readout = { $symbol }：{ $vol } 波动率下回报 { $ret }

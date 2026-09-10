@@ -98,3 +98,11 @@ analysis_returns = Variations quotidiennes
 analysis_monthly = Mensuel
 axis_return = Variation sur une séance
 performance_title = Performance, base 100
+
+# New interactive charts (day-piece-charts README "Selection").
+analysis_profile = Profil de volume
+wl_risk_title = Risque et rendement
+wl_corr_title = Corrélation
+wl_risk_none = Survolez ou touchez un symbole
+wl_corr_none = Survolez ou touchez une cellule
+wl_risk_readout = { $symbol } : { $ret } de rendement pour { $vol } de volatilité

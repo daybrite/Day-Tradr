@@ -117,6 +117,9 @@ fn percent_label(d: &Datum) -> String {
 /// on the latest price, dates along the bottom and price labels down the trailing edge.
 pub fn price_chart(quote: Signal<Load<Quote>>) -> impl Piece {
     let overlay = quotes::overlay();
+    // What the pointer is over. Owned here rather than by the chart, so the readout under the
+    // chart and the guides on it are two views of ONE thing (docs/charts.md "Selection").
+    let sel = Signal::new(None);
     chart(move || {
         let Some(q) = quote.with(|l| l.ready().cloned()) else {
             return Vec::new();
@@ -206,7 +209,16 @@ pub fn price_chart(quote: Signal<Load<Quote>>) -> impl Piece {
     .x_label("")
     .y_label("")
     .legend(LegendPosition::Hidden)
+    // A price chart snaps along x: a scrub reads every series at one date — the close and any
+    // overlay together — which is the whole reason to scrub a time series at all. Hover on a
+    // desktop, tap or drag on a phone; the chart wires all three.
+    .select(sel)
+    .snap(ch::select::Snap::NearestX)
+    .guides(ch::select::Guides::RULE)
     .plot_insets(STACKED_INSETS)
+    // After every Chart builder (`Decorated` does not forward them) and before `.height`/`.grow_w`
+    // (an id after a wrapper tags the wrapper, and a dayscript tap would miss the canvas).
+    .id("price-chart")
     .height(280.0)
     .grow_w()
 }
@@ -502,6 +514,155 @@ pub fn performance_chart(list: Signal<Vec<String>>) -> impl Piece {
     .y_label("")
     .legend(LegendPosition::Bottom)
     .height(240.0)
+    .grow_w()
+}
+
+/// Risk against return: one point per watchlist symbol, volatility across, annualized return up.
+///
+/// The chart a price line cannot be — it compares symbols on two numbers at once, and the shape of
+/// the cloud is the reading: a point up and to the LEFT earned more for less movement. Interactive
+/// because a scatter without it is unreadable the moment two points sit close: hovering (or, on a
+/// phone, tapping) names the symbol under the pointer and its two figures.
+pub fn risk_return_scatter(
+    list: Signal<Vec<String>>,
+    sel: Signal<Option<ch::select::Selection>>,
+) -> impl Piece {
+    chart(move || {
+        let days = window_days();
+        let mut marks: Vec<Mark> = Vec::new();
+        for symbol in list.get() {
+            let quote = quotes::resource_for(&symbol).signal();
+            let Some(q) = quote.with(|l| l.ready().cloned()) else {
+                continue;
+            };
+            let Some((closes, _)) = window(&q, days) else {
+                continue;
+            };
+            let Some((annual, vol)) = quotes::risk_return(closes) else {
+                continue;
+            };
+            marks.push(
+                ch::point(value("Volatility", vol), value("Return", annual))
+                    .by_series(value("Symbol", symbol.clone()))
+                    .symbol_size(90.0),
+            );
+        }
+        if !marks.is_empty() {
+            // Break-even, so "made money" and "lost money" are two halves of the picture rather
+            // than a number to read off the axis.
+            marks.push(
+                ch::rule_y(value("Return", 0.0))
+                    .foreground(Color::rgba(0.5, 0.5, 0.5, 0.55))
+                    .line_width(1.0)
+                    .dash([5.0, 5.0]),
+            );
+        }
+        marks
+    })
+    .x_format(percent_label)
+    .y_format(percent_label)
+    .y_axis_trailing()
+    .x_tick_count(5)
+    .legend(LegendPosition::Bottom)
+    .select(sel)
+    .snap(ch::select::Snap::NearestMark)
+    .guides(ch::select::Guides::CROSSHAIR)
+    .height(260.0)
+    .grow_w()
+}
+
+/// How the watchlist moves together: pairwise correlation of daily returns, as a matrix.
+///
+/// Two discrete axes and a diverging ramp — the one chart here whose value is entirely in its
+/// COLOR, which is why it needs the selection: a reader can see that a cell is blue without being
+/// able to say whether that is 0.3 or 0.6, and the label under the pointer says which.
+pub fn correlation_matrix(
+    list: Signal<Vec<String>>,
+    sel: Signal<Option<ch::select::Selection>>,
+) -> impl Piece {
+    chart(move || {
+        let days = window_days();
+        let symbols = list.get();
+        // Each symbol's returns once, not once per pair.
+        let series: Vec<(String, Vec<f64>)> = symbols
+            .iter()
+            .filter_map(|symbol| {
+                let quote = quotes::resource_for(symbol).signal();
+                let q = quote.with(|l| l.ready().cloned())?;
+                let (closes, _) = window(&q, days)?;
+                Some((symbol.clone(), quotes::daily_returns(closes)))
+            })
+            .collect();
+        let mut marks: Vec<Mark> = Vec::new();
+        for (a, ra) in &series {
+            for (b, rb) in &series {
+                let Some(c) = quotes::correlation(ra, rb) else {
+                    continue;
+                };
+                marks.push(
+                    ch::rect(value("Symbol", a.clone()), value("Against", b.clone()))
+                        .foreground(correlation_color(c))
+                        .corner_radius(2.0),
+                );
+            }
+        }
+        marks
+    })
+    .legend(LegendPosition::Hidden)
+    .select(sel)
+    .snap(ch::select::Snap::NearestMark)
+    .guides(ch::select::Guides::CROSSHAIR)
+    .height(260.0)
+    .grow_w()
+}
+
+/// A correlation as a color: the loss hue for negative, the gain hue for positive, and near-white
+/// through zero — a DIVERGING ramp, because zero is a meaningful middle here rather than one end
+/// of a range.
+fn correlation_color(c: f64) -> Color {
+    let t = c.abs().clamp(0.0, 1.0);
+    let end = trend_color(c >= 0.0);
+    Color::rgba(end.r, end.g, end.b, 0.12 + 0.78 * t)
+}
+
+/// Where the symbol actually traded: volume summed into price bands, drawn sideways so the bands
+/// line up with the price axis a reader has just been looking at.
+///
+/// A horizontal bar chart — the y axis discrete, the x continuous — which is the same `bar` mark
+/// with its channels the other way round.
+pub fn volume_profile(
+    quote: Signal<Load<Quote>>,
+    sel: Signal<Option<ch::select::Selection>>,
+) -> impl Piece {
+    chart(move || {
+        let Some(q) = quote.with(|l| l.ready().cloned()) else {
+            return Vec::new();
+        };
+        let Some((closes, _)) = window(&q, window_days()) else {
+            return Vec::new();
+        };
+        let volumes = quotes::tail(&q.volumes, closes.len());
+        let bands = quotes::volume_by_price(closes, volumes, 14);
+        let peak = bands.iter().map(|(_, _, v)| *v).fold(0.0f64, f64::max);
+        bands
+            .iter()
+            .filter(|(_, _, v)| *v > 0.0)
+            .map(|(lo, hi, v)| {
+                let mid = (lo + hi) / 2.0;
+                // The heaviest band in full strength, the rest faded by share — so the level the
+                // symbol traded at most reads first.
+                let share = if peak > 0.0 { v / peak } else { 0.0 };
+                ch::bar(value("Volume", *v), value("Price", format!("{mid:.0}")))
+                    .foreground(faded(SMA50_COLOR, 0.25 + 0.6 * share))
+            })
+            .collect()
+    })
+    .x_tick_count(3)
+    .legend(LegendPosition::Hidden)
+    .select(sel)
+    .snap(ch::select::Snap::NearestMark)
+    .guides(ch::select::Guides::RULE)
+    .height(220.0)
     .grow_w()
 }
 

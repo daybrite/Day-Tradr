@@ -66,6 +66,13 @@ flow:
   - assert_text: { id: detail-symbol, text: "MSFT" }
   - assert_text: { id: detail-price, text: "514.52" }
   - assert_text: { id: detail-name, text: "Microsoft Corp." }
+  # Chart selection (day-piece-charts README "Selection"): a tap on the price chart snaps to the
+  # nearest date and draws a rule through it plus a label box naming the date and every series'
+  # value there. Hover does the same on a desktop but cannot be scripted — it needs a real
+  # pointer — so the tap is what is driven, which is also the phone's own idiom.
+  - tap: { id: price-chart, at: [180, 120] }
+  - wait_idle:
+  - screenshot: { name: chart-selection }
 
   # Another symbol, reached through the watchlist; the shared range picker re-slices the chart.
   #

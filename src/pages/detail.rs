@@ -97,7 +97,10 @@ fn analysis_panel(quote: Signal<Load<quotes::Quote>>) -> impl Piece {
         res::str::analysis_drawdown().format(),
         res::str::analysis_returns().format(),
         res::str::analysis_monthly().format(),
+        res::str::analysis_profile().format(),
     ];
+    // The selection the volume profile writes and reads (day-piece-charts README "Selection").
+    let sel = Signal::new(None);
     let title = label(res::str::analysis_label()).font(Font::Callout);
     let control = picker(names, picked).segmented().id("analysis-picker");
     // The caption and a three-segment picker share a row where there is room; on a phone the
@@ -129,7 +132,13 @@ fn analysis_panel(quote: Signal<Load<quotes::Quote>>) -> impl Piece {
                 move || picked.get() == 2,
                 move || charts::monthly_heat_map(quote).id("analysis-monthly"),
             )
-            .otherwise(move || charts::drawdown_chart(quote).id("analysis-drawdown"))
+            .otherwise(move || {
+                when(
+                    move || picked.get() == 3,
+                    move || charts::volume_profile(quote, sel).id("analysis-profile"),
+                )
+                .otherwise(move || charts::drawdown_chart(quote).id("analysis-drawdown"))
+            })
         }),
     ))
     .spacing(8.0)

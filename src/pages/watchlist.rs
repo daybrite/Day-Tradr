@@ -186,9 +186,38 @@ fn performance_card(list: Signal<Vec<String>>) -> impl Piece {
             .grow_w()
             .any()
     };
+    // Two selections, one per chart: each is written and read by the chart that owns it, and the
+    // readouts below say in words what the guides say in pixels.
+    let risk_sel = Signal::new(None);
+    let corr_sel = Signal::new(None);
+    let readout = |sel: Signal<Option<day_piece_charts::select::Selection>>,
+                   none: fn() -> day::LocalizedText| {
+        label(move || match sel.get() {
+            Some(s) => {
+                let v = s.values.first();
+                // Alphabetical argument order, as every generated `res::str` takes.
+                let (ret, symbol, vol) = (
+                    v.map(|v| v.label.clone()).unwrap_or_default(),
+                    v.map(|v| v.series.clone()).unwrap_or_default(),
+                    s.x_label.clone(),
+                );
+                res::str::wl_risk_readout(ret, symbol, vol).format()
+            }
+            None => none().format(),
+        })
+        .font(Font::Caption)
+    };
     column((
         header,
         charts::performance_chart(list).id("performance-chart"),
+        // Risk against return — the comparison a price line cannot make.
+        label(res::str::wl_risk_title()).font(Font::Headline),
+        charts::risk_return_scatter(list, risk_sel).id("risk-return"),
+        readout(risk_sel, res::str::wl_risk_none).id("risk-readout"),
+        // How the list moves together.
+        label(res::str::wl_corr_title()).font(Font::Headline),
+        charts::correlation_matrix(list, corr_sel).id("correlation"),
+        readout(corr_sel, res::str::wl_corr_none).id("correlation-readout"),
     ))
     .spacing(8.0)
     .align(HAlign::Leading)

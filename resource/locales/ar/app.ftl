@@ -98,3 +98,11 @@ analysis_returns = التحركات اليومية
 analysis_monthly = شهري
 axis_return = التحرك في جلسة واحدة
 performance_title = الأداء، مؤشر إلى ١٠٠
+
+# New interactive charts (day-piece-charts README "Selection").
+analysis_profile = ملف الحجم
+wl_risk_title = المخاطرة والعائد
+wl_corr_title = الارتباط
+wl_risk_none = مرِّر أو انقر رمزًا
+wl_corr_none = مرِّر أو انقر خلية
+wl_risk_readout = ‏{ $symbol }: عائد { $ret } عند تقلب { $vol }

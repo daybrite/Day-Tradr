@@ -100,3 +100,11 @@ analysis_returns = Daily moves
 analysis_monthly = Monthly
 axis_return = One-session move
 performance_title = Performance, indexed to 100
+
+# New interactive charts (day-piece-charts README "Selection").
+analysis_profile = Volume profile
+wl_risk_title = Risk & return
+wl_corr_title = Correlation
+wl_risk_none = Hover or tap a symbol
+wl_corr_none = Hover or tap a cell
+wl_risk_readout = { $symbol }: { $ret } return at { $vol } volatility
